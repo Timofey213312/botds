@@ -235,20 +235,37 @@ from modules.tempvoice import setup_tempvoice
 from modules.logger import setup_logger
 from modules.ideas import setup_ideas
 
-# Настройка модулей
-setup_moderation(bot)
-setup_music(bot)
-setup_economy(bot)
-setup_games(bot)
-setup_utilities(bot)
-setup_help(bot)
-setup_welcome(bot)
-setup_rules(bot)
-setup_tickets(bot)
-setup_autoclean(bot)
-setup_tempvoice(bot)
-setup_logger(bot)
-setup_ideas(bot)
+# Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
+_setups = {
+    "moderation": setup_moderation,
+    "music": setup_music,
+    "economy": setup_economy,
+    "games": setup_games,
+    "utilities": setup_utilities,
+    "help": setup_help,
+    "welcome": setup_welcome,
+    "rules": setup_rules,
+    "tickets": setup_tickets,
+    "autoclean": setup_autoclean,
+    "tempvoice": setup_tempvoice,
+    "logger": setup_logger,
+    "ideas": setup_ideas,
+}
+for _name, _fn in _setups.items():
+    try:
+        _fn(bot)
+        logger.info(f"Модуль {_name} загружен")
+    except Exception as _e:
+        logger.error(f"ОШИБКА загрузки модуля {_name}: {_e}", exc_info=True)
+
+# После загрузки всех модулей — проверяем, что persistent views зарегистрированы
+_registered = sorted(set(
+    c.custom_id
+    for v in bot.persistent_views
+    for c in v.children
+    if getattr(c, 'custom_id', None)
+))
+logger.info(f"Persistent views зарегистрированы ({len(_registered)}): {', '.join(_registered)}")
 
 @bot.event
 async def on_command_error(ctx, error):
