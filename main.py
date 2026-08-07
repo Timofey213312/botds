@@ -181,6 +181,17 @@ class DiscordBot(commands.Bot):
             )
         ''')
         
+        await self.db.execute('''
+            CREATE TABLE IF NOT EXISTS warnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                moderator_id INTEGER,
+                reason TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         await self.db.commit()
         logger.info("База данных инициализирована")
         

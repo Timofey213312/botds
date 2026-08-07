@@ -17,7 +17,9 @@ CATEGORIES = {
         "description": "Команды для управления сервером",
         "emoji": "⚖️",
         "color": discord.Color.red(),
-        "commands": ["clear", "kick", "ban", "mute", "timeout", "untimeout", "report"]
+        "commands": ["clear", "kick", "ban", "unban", "mute", "timeout", "untimeout",
+                     "warn", "unwarn", "warnings", "slowmode", "lock", "unlock",
+                     "nick", "voicekick", "moveall", "report"]
     },
     "music": {
         "name": "🎵 Музыка",

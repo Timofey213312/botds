@@ -323,4 +323,271 @@ def setup_moderation(bot):
             await ctx.send(f"❌ Ошибка при отправке жалобы: {e}", ephemeral=True)
             logger.error(f'Ошибка жалобы: {e}')
     
+    @bot.hybrid_command(name="unban", description="Разбанить участника по ID или имени")
+    @app_commands.describe(user="ID или имя участника", reason="Причина разбана")
+    @commands.has_permissions(ban_members=True)
+    async def unban_cmd(ctx: commands.Context, user: str, *, reason: str = "Не указана"):
+        """Разбан участника"""
+        try:
+            banned = [entry async for entry in ctx.guild.bans()]
+            target = None
+            for entry in banned:
+                u = entry.user
+                if str(u.id) == user or u.name.lower() == user.lower() or str(u).lower() == user.lower():
+                    target = u
+                    break
+
+            if target is None:
+                await ctx.send("❌ Участник не найден в списке банов. Укажи ID или имя (например, `!unban 1234567890`).", ephemeral=True)
+                return
+
+            await ctx.guild.unban(target, reason=reason)
+            embed = discord.Embed(
+                title="✅ Участник разбанен",
+                color=discord.Color.green(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Участник", value=f"{target.mention} ({target.name})", inline=True)
+            embed.add_field(name="Модератор", value=ctx.author.mention, inline=True)
+            embed.add_field(name="Причина", value=reason, inline=False)
+            await ctx.send(embed=embed)
+            logger.info(f'{ctx.author} разбанил {target.name} по причине: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при разбане: {e}", ephemeral=True)
+            logger.error(f'Ошибка разбана: {e}')
+
+    @bot.hybrid_command(name="warn", description="Выдать предупреждение участнику")
+    @app_commands.describe(member="Участник для предупреждения", reason="Причина предупреждения")
+    @commands.has_permissions(manage_messages=True)
+    async def warn_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "Не указана"):
+        """Выдать предупреждение"""
+        try:
+            if member == ctx.author:
+                await ctx.send("❌ Нельзя выдать предупреждение самому себе", ephemeral=True)
+                return
+            if member.top_role >= ctx.author.top_role:
+                await ctx.send("❌ Нельзя выдать предупреждение участнику с равной или высшей ролью", ephemeral=True)
+                return
+
+            cursor = await bot.db.execute(
+                "INSERT INTO warnings (user_id, guild_id, moderator_id, reason) VALUES (?, ?, ?, ?)",
+                (member.id, ctx.guild.id, ctx.author.id, reason)
+            )
+            await bot.db.commit()
+            warn_id = cursor.lastrowid
+
+            # Получаем текущее количество предупреждений
+            cursor = await bot.db.execute(
+                "SELECT COUNT(*) FROM warnings WHERE user_id = ? AND guild_id = ?",
+                (member.id, ctx.guild.id)
+            )
+            count = (await cursor.fetchone())[0]
+
+            embed = discord.Embed(
+                title=f"⚠️ Предупреждение #{warn_id}",
+                color=discord.Color.orange(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Участник", value=member.mention, inline=True)
+            embed.add_field(name="Модератор", value=ctx.author.mention, inline=True)
+            embed.add_field(name="Всего предупреждений", value=str(count), inline=True)
+            embed.add_field(name="Причина", value=reason, inline=False)
+
+            await ctx.send(embed=embed)
+
+            try:
+                await member.send(f"⚠️ Вы получили предупреждение на сервере **{ctx.guild.name}**\n**Причина:** {reason}\n**Всего предупреждений:** {count}")
+            except:
+                pass
+
+            logger.info(f'{ctx.author} выдал предупреждение {member.name} (#{warn_id}): {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при выдаче предупреждения: {e}", ephemeral=True)
+            logger.error(f'Ошибка warn: {e}')
+
+    @bot.hybrid_command(name="warnings", description="Показать предупреждения участника")
+    @app_commands.describe(member="Участник для просмотра предупреждений")
+    async def warnings_cmd(ctx: commands.Context, member: discord.Member = None):
+        """Список предупреждений участника"""
+        try:
+            member = member or ctx.author
+            cursor = await bot.db.execute(
+                "SELECT id, moderator_id, reason, created_at FROM warnings WHERE user_id = ? AND guild_id = ? ORDER BY id DESC",
+                (member.id, ctx.guild.id)
+            )
+            rows = await cursor.fetchall()
+
+            embed = discord.Embed(
+                title=f"⚠️ Предупреждения: {member.display_name}",
+                color=discord.Color.orange() if rows else discord.Color.green(),
+                timestamp=datetime.now()
+            )
+            if not rows:
+                embed.description = "🎉 У этого участника нет предупреждений."
+            else:
+                embed.description = f"Всего: **{len(rows)}**"
+                for warn_id, mod_id, reason, created in rows[:15]:
+                    mod = ctx.guild.get_member(mod_id)
+                    embed.add_field(
+                        name=f"#{warn_id} • {created[:16]}",
+                        value=f"**Причина:** {reason}\n**Модератор:** {mod.mention if mod else 'Неизвестен'}",
+                        inline=False
+                    )
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при просмотре предупреждений: {e}", ephemeral=True)
+            logger.error(f'Ошибка warnings: {e}')
+
+    @bot.hybrid_command(name="unwarn", description="Снять предупреждение с участника")
+    @app_commands.describe(member="Участник для снятия предупреждения", warn_id="Номер предупреждения (из !warnings)")
+    @commands.has_permissions(manage_messages=True)
+    async def unwarn_cmd(ctx: commands.Context, member: discord.Member, warn_id: int = None):
+        """Снятие предупреждения"""
+        try:
+            if warn_id is None:
+                cursor = await bot.db.execute(
+                    "SELECT id FROM warnings WHERE user_id = ? AND guild_id = ? ORDER BY id DESC LIMIT 1",
+                    (member.id, ctx.guild.id)
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    await ctx.send(f"❌ У участника **{member.display_name}** нет предупреждений.", ephemeral=True)
+                    return
+                warn_id = row[0]
+
+            cursor = await bot.db.execute(
+                "DELETE FROM warnings WHERE id = ? AND guild_id = ?",
+                (warn_id, ctx.guild.id)
+            )
+            await bot.db.commit()
+            if cursor.rowcount == 0:
+                await ctx.send(f"❌ Предупреждение #{warn_id} не найдено.", ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title=f"✅ Предупреждение #{warn_id} снято",
+                description=f"У **{member.mention}** снято предупреждение.",
+                color=discord.Color.green(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Модератор", value=ctx.author.mention, inline=False)
+            await ctx.send(embed=embed)
+            logger.info(f'{ctx.author} снял предупреждение #{warn_id} с {member.name}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при снятии предупреждения: {e}", ephemeral=True)
+            logger.error(f'Ошибка unwarn: {e}')
+
+    @bot.hybrid_command(name="slowmode", description="Установить медленный режим канала")
+    @app_commands.describe(seconds="Задержка в секундах (0 = выключить)", channel="Канал для настройки")
+    @commands.has_permissions(manage_channels=True)
+    async def slowmode_cmd(ctx: commands.Context, seconds: int = 5, channel: discord.TextChannel = None):
+        """Установить slowmode в канале"""
+        try:
+            if seconds < 0 or seconds > 21600:
+                await ctx.send("❌ Задержка должна быть от 0 до 21600 секунд (6 часов).", ephemeral=True)
+                return
+            channel = channel or ctx.channel
+            await channel.edit(slowmode_delay=seconds)
+            text = "выключен" if seconds == 0 else f"**{seconds}** секунд"
+            await ctx.send(f"⏳ Медленный режим в {channel.mention}: {text}.", ephemeral=True)
+            logger.info(f'{ctx.author} установил slowmode {seconds}с в {channel.name}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при установке slowmode: {e}", ephemeral=True)
+            logger.error(f'Ошибка slowmode: {e}')
+
+    @bot.hybrid_command(name="lock", description="Закрыть канал для участников")
+    @app_commands.describe(channel="Канал для блокировки", reason="Причина блокировки")
+    @commands.has_permissions(manage_channels=True)
+    async def lock_cmd(ctx: commands.Context, channel: discord.TextChannel = None, *, reason: str = "Не указана"):
+        """Закрыть канал (запретить писать @everyone)"""
+        try:
+            channel = channel or ctx.channel
+            overwrite = channel.overwrites_for(channel.guild.default_role)
+            if overwrite.send_messages is False:
+                await ctx.send(f"🔒 Канал {channel.mention} уже закрыт.", ephemeral=True)
+                return
+            overwrite.send_messages = False
+            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite, reason=reason)
+            await ctx.send(f"🔒 Канал {channel.mention} закрыт.\n**Причина:** {reason}", ephemeral=True)
+            logger.info(f'{ctx.author} закрыл {channel.name}: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при закрытии канала: {e}", ephemeral=True)
+            logger.error(f'Ошибка lock: {e}')
+
+    @bot.hybrid_command(name="unlock", description="Открыть канал для участников")
+    @app_commands.describe(channel="Канал для разблокировки")
+    @commands.has_permissions(manage_channels=True)
+    async def unlock_cmd(ctx: commands.Context, channel: discord.TextChannel = None):
+        """Открыть канал"""
+        try:
+            channel = channel or ctx.channel
+            overwrite = channel.overwrites_for(channel.guild.default_role)
+            if overwrite.send_messages is None or overwrite.send_messages is True:
+                await ctx.send(f"🔓 Канал {channel.mention} уже открыт.", ephemeral=True)
+                return
+            overwrite.send_messages = None
+            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
+            await ctx.send(f"🔓 Канал {channel.mention} открыт.", ephemeral=True)
+            logger.info(f'{ctx.author} открыл {channel.name}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при открытии канала: {e}", ephemeral=True)
+            logger.error(f'Ошибка unlock: {e}')
+
+    @bot.hybrid_command(name="nick", description="Изменить никнейм участника")
+    @app_commands.describe(member="Участник для смены ника", nickname="Новый никнейм (без указания = сброс)")
+    @commands.has_permissions(manage_nicknames=True)
+    async def nick_cmd(ctx: commands.Context, member: discord.Member, *, nickname: str = None):
+        """Смена никнейма участника"""
+        try:
+            if member.top_role >= ctx.author.top_role:
+                await ctx.send("❌ Нельзя изменить ник участника с равной или высшей ролью", ephemeral=True)
+                return
+            await member.edit(nick=nickname, reason=f"Смена ника модератором {ctx.author}")
+            if nickname:
+                await ctx.send(f"✏️ Никнейм **{member.display_name}** изменён на `{nickname}`.", ephemeral=True)
+            else:
+                await ctx.send(f"✏️ Никнейм **{member.display_name}** сброшен.", ephemeral=True)
+            logger.info(f'{ctx.author} сменил ник {member.name} на {nickname}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при смене ника: {e}", ephemeral=True)
+            logger.error(f'Ошибка nick: {e}')
+
+    @bot.hybrid_command(name="voicekick", description="Отключить участника от голосового канала")
+    @app_commands.describe(member="Участник для отключения", reason="Причина")
+    @commands.has_permissions(move_members=True)
+    async def voicekick_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "Не указана"):
+        """Отключение участника от голосового канала"""
+        try:
+            if not member.voice or not member.voice.channel:
+                await ctx.send(f"❌ **{member.display_name}** не находится в голосовом канале.", ephemeral=True)
+                return
+            channel = member.voice.channel
+            await member.move_to(None, reason=reason)
+            await ctx.send(f"🚪 **{member.display_name}** отключён от **{channel.name}**.\n**Причина:** {reason}", ephemeral=True)
+            logger.info(f'{ctx.author} отключил {member.name} от {channel.name}: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при отключении: {e}", ephemeral=True)
+            logger.error(f'Ошибка voicekick: {e}')
+
+    @bot.hybrid_command(name="moveall", description="Переместить всех участников из голосового канала")
+    @app_commands.describe(from_channel="Откуда переместить", to_channel="Куда переместить")
+    @commands.has_permissions(move_members=True)
+    async def moveall_cmd(ctx: commands.Context, from_channel: discord.VoiceChannel, to_channel: discord.VoiceChannel):
+        """Перемещение всех участников между голосовыми каналами"""
+        try:
+            members = [m for m in from_channel.members]
+            if not members:
+                await ctx.send(f"❌ В канале **{from_channel.name}** нет участников.", ephemeral=True)
+                return
+            for m in members:
+                try:
+                    await m.move_to(to_channel, reason=f"Перемещение модератором {ctx.author}")
+                except Exception:
+                    pass
+            await ctx.send(f"🔀 Перемещено **{len(members)}** участников из **{from_channel.name}** в **{to_channel.name}**.", ephemeral=True)
+            logger.info(f'{ctx.author} переместил {len(members)} участников из {from_channel.name} в {to_channel.name}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка при перемещении: {e}", ephemeral=True)
+            logger.error(f'Ошибка moveall: {e}')
+
     logger.info("Модуль модерации загружен")
