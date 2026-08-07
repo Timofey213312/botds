@@ -898,6 +898,13 @@ def setup_music(bot):
                     full = await search_track(track['webpage_url'], source)
                     if full:
                         track = full
+                    else:
+                        await interaction.followup.send(
+                            f"❌ **{track['title']}** недоступен для воспроизведения (DRM или ограничение). "
+                            f"Выбери другой трек.",
+                            ephemeral=True,
+                        )
+                        return
 
                 if vc.is_playing() or vc.is_paused():
                     position = music_player.add_to_queue(interaction.guild_id, track)
