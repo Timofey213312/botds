@@ -51,7 +51,7 @@ async def _collect_panels(channel, label):
 
 
 async def restore_panels(bot):
-    """Основная функция: пересоздаёт панели с устаревшими custom_id"""
+    """При старте бота: удаляет ВСЕ панели в каналах и отправляет свежие"""
     logger.info('Авто-восстановление панелей: начало')
     restored = 0
     for guild in bot.guilds:
@@ -60,25 +60,15 @@ async def restore_panels(bot):
             if channel is None:
                 continue
             try:
-                messages = await _collect_panels(channel, panel['label'])
-                for msg in messages:
-                    # Проверяем, совпадают ли custom_id с актуальными
-                    current_ids = set()
-                    for row in msg.components:
-                        for comp in row.children:
-                            if isinstance(comp, discord.Button) and comp.custom_id:
-                                current_ids.add(comp.custom_id)
-                    if current_ids == panel['expected_ids']:
-                        continue  # панель актуальна — не трогаем
-                    # Панель устарела/мёртвая — пересоздаём
-                    await msg.delete()
-                    embed, view = panel['build'](guild)
-                    await channel.send(embed=embed, view=view)
-                    restored += 1
-                    logger.info(f'Панель «{panel["label"]}» пересоздана в {channel.name}')
+                removed = await _find_or_send(channel, panel['label'], panel['build'])
+                restored += 1
+                if removed:
+                    logger.info(f'Панель «{panel["label"]}» пересоздана в {channel.name} (удалено старых: {removed})')
+                else:
+                    logger.info(f'Панель «{panel["label"]}» размещена в {channel.name}')
             except Exception as e:
                 logger.error(f'Ошибка восстановления панели в {channel.name}: {e}')
-    logger.info(f'Авто-восстановление панелей завершено, пересоздано: {restored}')
+    logger.info(f'Авто-восстановление панелей завершено, панелей размещено: {restored}')
 
 
 async def _find_or_send(channel, label, build):
