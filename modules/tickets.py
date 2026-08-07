@@ -1,5 +1,5 @@
 """
-Модуль системы тикетов
+Модуль системы тикетов (устойчивая версия)
 - !ticket — сообщение с кнопкой «Открыть тикет»
 - !ticket-add / !ticket-remove — управление участниками тикета
 - Кнопка «Закрыть тикет» с сохранением транскрипта
@@ -7,6 +7,7 @@
 
 import io
 import logging
+import re
 from datetime import datetime
 
 import discord
@@ -21,28 +22,50 @@ TICKET_PREFIX = 'ticket-'
 
 def _staff_roles(guild):
     """Роли с правом управления каналами (администрация/модерация)"""
-    return [role for role in guild.roles if role.permissions.manage_channels]
+    return [role for role in guild.roles if role.permissions.manage_channels and not role.is_default()]
 
 
 def _is_staff(member):
-    return member.guild_permissions.manage_channels or member.guild_permissions.administrator
+    return bool(member.guild_permissions.manage_channels or member.guild_permissions.administrator)
+
+
+def _safe_channel_name(name, max_len=32):
+    """Приводит имя к допустимому формату имени канала Discord"""
+    name = re.sub(r'[^a-z0-9а-яё\-_ ]', '', name.lower()).strip()
+    name = re.sub(r'\s+', '-', name)
+    name = re.sub(r'-+', '-', name).strip('-')
+    if not name:
+        name = 'user'
+    return name[:max_len]
 
 
 async def _find_or_create_category(guild):
     """Поиск или создание категории тикетов"""
     for cat in guild.categories:
-        name = (cat.name or '').lower()
-        if 'ticket' in name or 'тикет' in name:
+        if 'ticket' in (cat.name or '').lower() or 'тикет' in (cat.name or '').lower():
             return cat
+
+    bot_member = guild.me
+    if not bot_member.guild_permissions.manage_channels:
+        return None
+
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True, manage_channels=True
+        ),
     }
     for role in _staff_roles(guild):
         overwrites[role] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True, manage_channels=True
         )
-    return await guild.create_category('🎫 Тикеты', overwrites=overwrites)
+    try:
+        return await guild.create_category('🎫 Тикеты', overwrites=overwrites)
+    except discord.Forbidden:
+        return None
+    except Exception as e:
+        logger.error(f'Ошибка создания категории тикетов: {e}')
+        return None
 
 
 def _find_transcript_channel(guild):
@@ -58,14 +81,29 @@ def _find_transcript_channel(guild):
 async def _open_ticket(interaction):
     user = interaction.user
     guild = interaction.guild
+
+    if not guild.me.guild_permissions.manage_channels:
+        await interaction.response.send_message(
+            "❌ У бота нет прав `Управлять каналами`. Выдай их и попробуй снова.", ephemeral=True
+        )
+        return
+
     cat = await _find_or_create_category(guild)
+    if cat is None:
+        await interaction.response.send_message(
+            "❌ Не удалось найти/создать категорию тикетов. Проверь права бота.", ephemeral=True
+        )
+        return
 
     # Проверка существующего тикета
     for ch in cat.channels:
         if ch.topic and f'owner:{user.id}' in ch.topic:
-            await interaction.response.send_message(
-                f"❌ У тебя уже есть открытый тикет: {ch.mention}", ephemeral=True
-            )
+            try:
+                await interaction.response.send_message(
+                    f"❌ У тебя уже есть открытый тикет: {ch.mention}", ephemeral=True
+                )
+            except discord.InteractionResponded:
+                pass
             return
 
     overwrites = {
@@ -74,14 +112,16 @@ async def _open_ticket(interaction):
             view_channel=True, send_messages=True, read_message_history=True,
             attach_files=True, embed_links=True,
         ),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True
+        ),
     }
     for role in _staff_roles(guild):
         overwrites[role] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True
         )
 
-    base_name = f'{TICKET_PREFIX}{user.name.lower()}'
+    base_name = f'{TICKET_PREFIX}{_safe_channel_name(user.name)}'
     name = base_name
     existing = {c.name for c in cat.channels}
     count = 2
@@ -89,9 +129,22 @@ async def _open_ticket(interaction):
         name = f'{base_name}-{count}'
         count += 1
 
-    channel = await guild.create_text_channel(
-        name, category=cat, overwrites=overwrites, topic=f'owner:{user.id}'
-    )
+    try:
+        channel = await guild.create_text_channel(
+            name, category=cat, overwrites=overwrites, topic=f'owner:{user.id}'
+        )
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "❌ У бота нет прав создавать каналы.", ephemeral=True
+        )
+        return
+    except Exception as e:
+        logger.error(f'Ошибка создания канала тикета: {e}')
+        try:
+            await interaction.response.send_message(f"❌ Ошибка создания тикета: {e}", ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+        return
 
     embed = discord.Embed(
         title="🎫 Новый тикет",
@@ -99,11 +152,13 @@ async def _open_ticket(interaction):
         color=EMBED_COLOR,
     )
     embed.add_field(name="Создал", value=user.mention, inline=True)
-    embed.add_field(name="Канал", value=channel.mention, inline=True)
     embed.set_footer(text=datetime.now().strftime('%d.%m.%Y %H:%M'))
 
-    await channel.send(f"{user.mention}", embed=embed, view=CloseTicketButton())
-    await interaction.response.send_message(f"✅ Тикет создан: {channel.mention}", ephemeral=True)
+    try:
+        await channel.send(embed=embed, view=CloseTicketButton())
+        await interaction.response.send_message(f"✅ Тикет создан: {channel.mention}", ephemeral=True)
+    except discord.InteractionResponded:
+        await interaction.followup.send(f"✅ Тикет создан: {channel.mention}", ephemeral=True)
     logger.info(f'{user} создал тикет {channel.name}')
 
 
@@ -111,18 +166,28 @@ async def _close_ticket(interaction):
     user = interaction.user
     channel = interaction.channel
     if not isinstance(channel, discord.TextChannel) or not channel.name.startswith(TICKET_PREFIX):
-        await interaction.response.send_message("❌ Это не канал тикета.", ephemeral=True)
+        try:
+            await interaction.response.send_message("❌ Это не канал тикета.", ephemeral=True)
+        except discord.InteractionResponded:
+            pass
         return
 
     owner_ok = channel.topic and f'owner:{user.id}' in channel.topic
     if not owner_ok and not _is_staff(user):
-        await interaction.response.send_message(
-            "❌ Только автор тикета или администрация могут закрыть тикет.", ephemeral=True
-        )
+        try:
+            await interaction.response.send_message(
+                "❌ Только автор тикета или администрация могут закрыть тикет.", ephemeral=True
+            )
+        except discord.InteractionResponded:
+            pass
         return
 
     guild = channel.guild
-    await interaction.response.defer(ephemeral=True)
+
+    try:
+        await interaction.response.defer(ephemeral=True)
+    except discord.InteractionResponded:
+        pass
 
     # Сохранение транскрипта
     log_channel = _find_transcript_channel(guild)
@@ -143,9 +208,22 @@ async def _close_ticket(interaction):
         except Exception as e:
             logger.error(f'Ошибка сохранения транскрипта: {e}')
 
-    await channel.delete()
-    await interaction.followup.send("🔒 Тикет закрыт.", ephemeral=True)
-    logger.info(f'{user} закрыл тикет {channel.name}')
+    name = channel.name
+    try:
+        await channel.delete()
+    except Exception as e:
+        logger.error(f'Ошибка удаления канала: {e}')
+        try:
+            await interaction.followup.send("❌ Не удалось удалить канал тикета.", ephemeral=True)
+        except Exception:
+            pass
+        return
+
+    try:
+        await interaction.followup.send("🔒 Тикет закрыт.", ephemeral=True)
+    except Exception:
+        pass
+    logger.info(f'{user} закрыл тикет {name}')
 
 
 class OpenTicketButton(discord.ui.View):
@@ -157,8 +235,13 @@ class OpenTicketButton(discord.ui.View):
         logger.info(f'Кнопка «Открыть тикет» нажата пользователем {interaction.user} в {interaction.guild}')
         try:
             await _open_ticket(interaction)
+        except discord.InteractionResponded:
+            pass
         except Exception as e:
-            await interaction.response.send_message(f"❌ Ошибка при создании тикета: {e}", ephemeral=True)
+            try:
+                await interaction.response.send_message(f"❌ Ошибка при создании тикета: {e}", ephemeral=True)
+            except discord.InteractionResponded:
+                pass
             logger.error(f'Ошибка открытия тикета: {e}')
 
 
@@ -170,8 +253,13 @@ class CloseTicketButton(discord.ui.View):
     async def close_button(self, interaction, button):
         try:
             await _close_ticket(interaction)
+        except discord.InteractionResponded:
+            pass
         except Exception as e:
-            await interaction.response.send_message(f"❌ Ошибка при закрытии тикета: {e}", ephemeral=True)
+            try:
+                await interaction.response.send_message(f"❌ Ошибка при закрытии тикета: {e}", ephemeral=True)
+            except discord.InteractionResponded:
+                pass
             logger.error(f'Ошибка закрытия тикета: {e}')
 
 
