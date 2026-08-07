@@ -223,7 +223,6 @@ from modules.autoclean import setup_autoclean
 from modules.tempvoice import setup_tempvoice
 from modules.logger import setup_logger
 from modules.ideas import setup_ideas
-from modules.partners import setup_partners
 
 # Настройка модулей
 setup_moderation(bot)
@@ -239,7 +238,6 @@ setup_autoclean(bot)
 setup_tempvoice(bot)
 setup_logger(bot)
 setup_ideas(bot)
-setup_partners(bot)
 
 @bot.event
 async def on_command_error(ctx, error):

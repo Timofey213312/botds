@@ -56,13 +56,6 @@ CATEGORIES = {
         "emoji": "💡",
         "color": discord.Color.purple(),
         "commands": ["idea-panel"]
-    },
-    "partners": {
-        "name": "🤝 Партнёрства",
-        "description": "Заявки на партнёрство",
-        "emoji": "🤝",
-        "color": discord.Color.dark_magenta(),
-        "commands": ["partner-panel"]
     }
 }
 
