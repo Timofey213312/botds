@@ -229,13 +229,16 @@ def setup_applications(bot):
     """Настройка системы подачи заявок"""
 
     @bot.hybrid_command(name="apply-setup", description="Создать/обновить заявку на роль")
-    @app_commands.describe(name="Название заявки (например: media, клан)", role="Роль, которая выдаётся", channel="Канал приёма заявок (по умолчанию текущий)")
+    @app_commands.describe(role="Роль, которая выдаётся", channel="Канал приёма заявок (по умолчанию текущий)", name="Название заявки (например: Подача в клан)")
     @commands.has_permissions(manage_roles=True)
-    async def apply_setup_cmd(ctx: commands.Context, name: str, role: discord.Role, channel: discord.TextChannel = None):
+    async def apply_setup_cmd(ctx: commands.Context, role: discord.Role, channel: discord.TextChannel = None, *, name: str = None):
         """Настройка заявки"""
         try:
+            if not name:
+                await ctx.send("❌ Укажи название заявки, например: `!apply-setup @роль #канал Подача в клан`.", ephemeral=True)
+                return
             channel = channel or ctx.channel
-            name_lower = name.lower()
+            name_lower = name.strip().lower()
             cursor = await bot.db.execute(
                 "SELECT id FROM applications WHERE guild_id = ? AND name = ?",
                 (ctx.guild.id, name_lower)
@@ -270,7 +273,7 @@ def setup_applications(bot):
             apps = await _get_applications(bot, ctx.guild.id)
             if not apps:
                 await ctx.send(
-                    "❌ Заявок нет. Сначала настрой: `!apply-setup <название> @роль #канал`.",
+                    "❌ Заявок нет. Сначала настрой: `!apply-setup @роль #канал Подача в клан`.",
                     ephemeral=True
                 )
                 return
@@ -326,12 +329,12 @@ def setup_applications(bot):
     @bot.hybrid_command(name="apply-remove", description="Удалить заявку")
     @app_commands.describe(name="Название заявки")
     @commands.has_permissions(manage_roles=True)
-    async def apply_remove_cmd(ctx: commands.Context, name: str):
+    async def apply_remove_cmd(ctx: commands.Context, *, name: str):
         """Удаление заявки"""
         try:
             cursor = await bot.db.execute(
                 "DELETE FROM applications WHERE guild_id = ? AND name = ?",
-                (ctx.guild.id, name.lower())
+                (ctx.guild.id, name.strip().lower())
             )
             await bot.db.commit()
             if cursor.rowcount:
