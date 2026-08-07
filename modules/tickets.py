@@ -335,7 +335,7 @@ def setup_tickets(bot):
         return embed, OpenTicketButton()
 
     register_panel(
-        channel_keywords=('ticket', 'тикет'),
+        channel_keywords=('ticket', 'тикет', 'помощь', '🎫'),
         label="🎫 Открыть тикет",
         expected_ids=["ticket_open"],
         build=_build_ticket_panel,
