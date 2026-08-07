@@ -542,9 +542,9 @@ def setup_music(bot):
 
     bot.panel_autoupdate = panel_autoupdate
 
-    async def ensure_panel(guild_id, channel=None):
-        """Отправить панель в текстовый канал, если её ещё нет"""
-        if music_player.panel_messages.get(guild_id):
+    async def ensure_panel(guild_id, channel=None, force=False):
+        """Отправить панель в текстовый канал"""
+        if not force and music_player.panel_messages.get(guild_id):
             return
         if channel is None:
             guild = bot.get_guild(guild_id)
@@ -553,6 +553,12 @@ def setup_music(bot):
         if channel is None:
             return
         try:
+            old = music_player.panel_messages.get(guild_id)
+            if old:
+                try:
+                    await old.delete()
+                except Exception:
+                    pass
             embed = get_panel_embed(guild_id)
             view = MusicPanel()
             msg = await channel.send(embed=embed, view=view)
@@ -934,6 +940,7 @@ def setup_music(bot):
 
                 await update_panel(interaction.guild_id)
                 await interaction.message.edit(content=f"🔎 Результаты по запросу:", view=None)
+                await ensure_panel(interaction.guild_id, interaction.channel, force=True)
             except Exception as e:
                 logger.error(f'Ошибка выбора трека: {e}')
                 try:
