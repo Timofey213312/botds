@@ -86,7 +86,10 @@ class IdeaModal(discord.ui.Modal, title="💡 Предложить идею"):
         msg = await channel.send(embed=embed, view=IdeaModerationView())
         await msg.add_reaction('👍')
         await msg.add_reaction('👎')
-        await interaction.response.send_message(f"✅ Идея опубликована в {channel.mention}", ephemeral=True)
+        await interaction.response.send_message(
+            "📨 Ваша идея отправлена. Ожидайте, пока администрация рассмотрит её.",
+            ephemeral=True,
+        )
         logger.info(f'{interaction.user} предложил идею: {self.title_field.value}')
 
 
