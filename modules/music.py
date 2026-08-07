@@ -784,32 +784,40 @@ def setup_music(bot):
                 )
             await update_panel(self.guild_id)
 
-    class SourceSelectView(discord.ui.View):
-        """Панелька выбора источника поиска трека"""
+    class AutoSearchView(discord.ui.View):
+        """Список найденных треков из всех источников"""
 
-        def __init__(self, query):
+        SOURCES = {
+            'youtube': '🔴 YouTube',
+            'soundcloud': '🎧 SoundCloud',
+            'yandex': '🎶 Яндекс',
+        }
+
+        def __init__(self, tracks):
             super().__init__(timeout=120)
-            self.query = query
+            self.tracks = tracks
+            options = []
+            for i, (source, track) in enumerate(tracks):
+                title = track['title'][:60]
+                channel = (track.get('channel') or '')[:30]
+                label = f"{self.SOURCES.get(source, source)} | {title}"
+                desc = channel if channel else None
+                options.append(discord.SelectOption(label=label, value=str(i), description=desc))
+            select = discord.ui.Select(
+                placeholder="🎵 Выбери трек...",
+                min_values=1,
+                max_values=1,
+                options=options,
+            )
+            select.callback = self._on_select
+            self.add_item(select)
+            self.add_item(discord.ui.Button(label="❌ Закрыть", style=discord.ButtonStyle.secondary, custom_id="auto_cancel"))
 
-        @discord.ui.button(label="▶️ YouTube", style=discord.ButtonStyle.danger, custom_id="src_youtube", emoji="🔴")
-        async def btn_youtube(self, interaction, button):
-            await self._search_and_play(interaction, 'youtube')
-
-        @discord.ui.button(label="SoundCloud", style=discord.ButtonStyle.primary, custom_id="src_soundcloud", emoji="🎧")
-        async def btn_soundcloud(self, interaction, button):
-            await self._search_and_play(interaction, 'soundcloud')
-
-        @discord.ui.button(label="Яндекс Музыка", style=discord.ButtonStyle.success, custom_id="src_yandex", emoji="🎶")
-        async def btn_yandex(self, interaction, button):
-            await self._search_and_play(interaction, 'yandex')
-
-        @discord.ui.button(label="❌", style=discord.ButtonStyle.secondary, custom_id="src_cancel")
-        async def btn_cancel(self, interaction, button):
-            await interaction.response.edit_message(content="Поиск отменён", view=None)
-
-        async def _search_and_play(self, interaction, source):
+        async def _on_select(self, interaction):
             try:
                 await interaction.response.defer(ephemeral=True)
+                idx = int(interaction.data['values'][0])
+                source, track = self.tracks[idx]
 
                 if not interaction.user.voice:
                     await interaction.followup.send("❌ Вы должны быть в голосовом канале", ephemeral=True)
@@ -823,28 +831,31 @@ def setup_music(bot):
                         await interaction.followup.send(f"❌ Не удалось подключиться: {e}", ephemeral=True)
                         return
 
-                track = await search_track(self.query, source)
-                if not track:
-                    await interaction.followup.send("❌ Трек не найден", ephemeral=True)
-                    return
-
                 if vc.is_playing() or vc.is_paused():
                     position = music_player.add_to_queue(interaction.guild_id, track)
                     await interaction.followup.send(
-                        f"🎵 Добавлен в очередь (#{position}): **{track['title']}**", ephemeral=True
+                        f"🎵 Добавлен в очередь (#{position}): **{track['title']}** ({self.SOURCES.get(source, source)})",
+                        ephemeral=True,
                     )
                 else:
                     await play_track(interaction.guild_id, vc, track, interaction.channel)
-                    await interaction.followup.send(f"▶️ Играет: **{track['title']}**", ephemeral=True)
+                    await interaction.followup.send(
+                        f"▶️ Играет: **{track['title']}** ({self.SOURCES.get(source, source)})",
+                        ephemeral=True,
+                    )
 
                 await update_panel(interaction.guild_id)
-                await interaction.message.edit(content=f"🔎 Поиск: **{self.query}**", view=None)
+                await interaction.message.edit(content=f"🔎 Результаты по запросу:", view=None)
             except Exception as e:
-                logger.error(f'Ошибка выбора источника: {e}')
+                logger.error(f'Ошибка выбора трека: {e}')
                 try:
                     await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
                 except Exception:
                     pass
+
+        @discord.ui.button(label="❌ Закрыть", style=discord.ButtonStyle.secondary, custom_id="auto_cancel_btn")
+        async def btn_cancel(self, interaction, button):
+            await interaction.response.edit_message(content="Поиск закрыт", view=None)
 
     bot.add_view(MusicPanel())
 
@@ -901,11 +912,28 @@ def setup_music(bot):
                 logger.info(f'{ctx.author} загрузил плейлист: {title} ({len(playlist_tracks)} треков)')
                 return
 
-            # Обычный текстовый запрос — показываем панельку выбора источника
-            view = SourceSelectView(query)
+            # Обычный текстовый запрос — ищем сразу во всех источниках
+            await ctx.send("🔎 Ищу трек во всех источниках...")
+
+            sources = ['youtube', 'soundcloud', 'yandex']
+            results = await asyncio.gather(
+                *(search_track(query, s) for s in sources),
+                return_exceptions=True,
+            )
+
+            tracks = []
+            for source, res in zip(sources, results):
+                if isinstance(res, dict) and res.get('url'):
+                    tracks.append((source, res))
+
+            if not tracks:
+                await ctx.send("❌ Трек не найден ни в одном источнике", ephemeral=True)
+                return
+
+            view = AutoSearchView(tracks)
             embed = discord.Embed(
-                title="🔎 Где искать трек?",
-                description=f"Запрос: **{query}**\nВыбери источник поиска:",
+                title="🔎 Найдено треков",
+                description=f"Запрос: **{query}**\nНайдено: **{len(tracks)}** из **{len(sources)}** источников.",
                 color=discord.Color.blurple(),
                 timestamp=datetime.now(),
             )
