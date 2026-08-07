@@ -107,7 +107,7 @@ def _build_settings_embed(member):
 class VoiceSettingsView(discord.ui.View):
     """Панель управления временным войсом"""
 
-    def __init__(self, bot, timeout=600):
+    def __init__(self, bot, timeout=None):
         super().__init__(timeout=timeout)
         self.bot = bot
         self.add_item(RenameButton())
@@ -124,7 +124,7 @@ class VoiceSettingsView(discord.ui.View):
 
 class RenameButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Переименовать", style=discord.ButtonStyle.primary, emoji="📝", row=0)
+        super().__init__(label="Переименовать", style=discord.ButtonStyle.primary, emoji="📝", row=0, custom_id="tv_rename")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -151,7 +151,7 @@ class RenameModal(discord.ui.Modal):
 
 class UserLimitButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Лимит", style=discord.ButtonStyle.secondary, emoji="👥", row=0)
+        super().__init__(label="Лимит", style=discord.ButtonStyle.secondary, emoji="👥", row=0, custom_id="tv_limit")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -182,7 +182,7 @@ class UserLimitModal(discord.ui.Modal):
 
 class LockButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Блокировка", style=discord.ButtonStyle.secondary, emoji="🔒", row=0)
+        super().__init__(label="Блокировка", style=discord.ButtonStyle.secondary, emoji="🔒", row=0, custom_id="tv_lock")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -203,7 +203,7 @@ class LockButton(discord.ui.Button):
 
 class HideButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Скрыть", style=discord.ButtonStyle.secondary, emoji="🙈", row=0)
+        super().__init__(label="Скрыть", style=discord.ButtonStyle.secondary, emoji="🙈", row=0, custom_id="tv_hide")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -224,7 +224,7 @@ class HideButton(discord.ui.Button):
 
 class MuteUserButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Замутить", style=discord.ButtonStyle.secondary, emoji="🔇", row=1)
+        super().__init__(label="Замутить", style=discord.ButtonStyle.secondary, emoji="🔇", row=1, custom_id="tv_mute")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -256,7 +256,7 @@ class MuteUserModal(discord.ui.Modal):
 
 class KickUserButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Кикнуть", style=discord.ButtonStyle.danger, emoji="🚫", row=1)
+        super().__init__(label="Кикнуть", style=discord.ButtonStyle.danger, emoji="🚫", row=1, custom_id="tv_kick")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -286,7 +286,7 @@ class KickUserModal(discord.ui.Modal):
 
 class TransferButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Передать", style=discord.ButtonStyle.secondary, emoji="👑", row=1)
+        super().__init__(label="Передать", style=discord.ButtonStyle.secondary, emoji="👑", row=1, custom_id="tv_transfer")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -313,7 +313,7 @@ class TransferModal(discord.ui.Modal):
 
 class DeleteButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="Удалить войс", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
+        super().__init__(label="Удалить войс", style=discord.ButtonStyle.danger, emoji="🗑️", row=1, custom_id="tv_delete")
 
     async def callback(self, interaction: discord.Interaction):
         if not await _ensure_owner(interaction):
@@ -421,7 +421,8 @@ def setup_tempvoice(bot):
         except Exception as e:
             logger.error(f'Ошибка tempvoice_handler: {e}')
 
-    logger.info("Модуль временных войс-каналов загружен")
+    bot.add_view(VoiceSettingsView(bot))
+    logger.info("Модуль временных войс-каналов загружен (persistent views: tv_rename, tv_limit, tv_lock, tv_hide, tv_mute, tv_kick, tv_transfer, tv_delete)")
 
 
 async def _create_temp_channel(bot, member, create_channel):
