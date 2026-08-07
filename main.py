@@ -201,8 +201,8 @@ class DiscordBot(commands.Bot):
         # Устанавливаем статус бота
         await self.change_presence(
             activity=discord.Activity(
-                type=discord.ActivityType.listening,
-                name=f"{PREFIX}help | {len(self.guilds)} серверов"
+                type=discord.ActivityType.watching,
+                name="Vector.Prod | Discord v3.4.0"
             )
         )
 
