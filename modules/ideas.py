@@ -15,20 +15,31 @@ from discord.ext import commands
 logger = logging.getLogger('discord_bot.ideas')
 
 EMBED_COLOR = 0x9000FF
-IDEAS_CHANNEL_KEYWORDS = ('idea', 'иде', 'suggest', 'приём-заявок', 'прием-заявок', 'приём', 'прием')
+PANEL_CHANNEL_KEYWORDS = ('idea', 'иде', 'suggest')
+SUBMIT_CHANNEL_KEYWORDS = ('приём-заявок', 'прием-заявок', 'приём', 'прием')
 STATUS_UNDER_REVIEW = '📝 На рассмотрении'
 STATUS_APPROVED = '✅ Принято'
 STATUS_REJECTED = '❌ Отклонено'
 
 
-def _find_ideas_channel(guild):
-    """Поиск канала идей по названию"""
+def _find_channel(guild, keywords):
+    """Поиск канала по ключевым словам"""
     for channel in guild.text_channels:
         name = (channel.name or '').lower()
-        for kw in IDEAS_CHANNEL_KEYWORDS:
+        for kw in keywords:
             if kw in name:
                 return channel
     return None
+
+
+def _find_panel_channel(guild):
+    """Канал для панели с кнопкой (идеи)"""
+    return _find_channel(guild, PANEL_CHANNEL_KEYWORDS)
+
+
+def _find_submit_channel(guild):
+    """Канал для приёма заявок-идей (📥-приём-заявок)"""
+    return _find_channel(guild, SUBMIT_CHANNEL_KEYWORDS)
 
 
 def _is_staff(member):
@@ -54,10 +65,10 @@ class IdeaModal(discord.ui.Modal, title="💡 Предложить идею"):
         self.guild = guild
 
     async def on_submit(self, interaction):
-        channel = _find_ideas_channel(interaction.guild)
+        channel = _find_submit_channel(interaction.guild)
         if channel is None:
             await interaction.response.send_message(
-                "❌ Канал идей не найден. Создай канал с «idea» или «иде» в названии.",
+                "❌ Канал приёма заявок не найден. Создай канал с «приём-заявок» в названии.",
                 ephemeral=True,
             )
             return
@@ -128,7 +139,7 @@ def setup_ideas(bot):
             if not _is_staff(ctx.author):
                 await ctx.send("❌ Недостаточно прав.", ephemeral=True)
                 return
-            channel = _find_ideas_channel(ctx.guild)
+            channel = _find_panel_channel(ctx.guild)
             if channel is None:
                 await ctx.send(
                     "❌ Канал идей не найден. Создай канал с «idea» или «иде» в названии.",
