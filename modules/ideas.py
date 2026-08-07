@@ -110,7 +110,32 @@ class IdeaModerationView(discord.ui.View):
             text=f"{embed.footer.text if embed.footer.text else ''} • {interaction.user.display_name}"
         )
         await interaction.response.edit_message(embed=embed, view=None)
+
+        # Уведомление автора идеи в ЛС
+        await self._notify_author(interaction, embed, status)
         logger.info(f'{interaction.user} {status} идею: {embed.title}')
+
+    async def _notify_author(self, interaction, embed, status):
+        try:
+            import re as _re
+            m = _re.search(r'ID:\s*(\d+)', embed.footer.text or '')
+            if not m:
+                return
+            author = await interaction.guild.fetch_member(int(m.group(1)))
+            if not author:
+                return
+            msg = discord.Embed(
+                title=f"💡 Статус вашей идеи",
+                description=f"Идея: **{embed.title}**\n\nСтатус: **{status}**",
+                color=embed.color,
+            )
+            msg.add_field(name="Описание", value=(embed.description or '_(без описания)_')[:500], inline=False)
+            msg.set_footer(text=interaction.guild.name)
+            await author.send(embed=msg)
+        except discord.Forbidden:
+            pass
+        except Exception as e:
+            logger.error(f'Ошибка отправки уведомления автору идеи: {e}')
 
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="idea_approve")
     async def approve(self, interaction, button):
