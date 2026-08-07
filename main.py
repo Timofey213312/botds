@@ -241,6 +241,7 @@ from modules.autoclean import setup_autoclean
 from modules.tempvoice import setup_tempvoice
 from modules.logger import setup_logger
 from modules.ideas import setup_ideas
+from modules.panels import setup_panels
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -257,6 +258,7 @@ _setups = {
     "tempvoice": setup_tempvoice,
     "logger": setup_logger,
     "ideas": setup_ideas,
+    "panels": setup_panels,
 }
 for _name, _fn in _setups.items():
     try:

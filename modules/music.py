@@ -567,6 +567,8 @@ def setup_music(bot):
         except Exception as e:
             logger.error(f'Ошибка автоотправки панели: {e}')
 
+    bot.ensure_music_panel = ensure_panel
+
     async def restart_track(guild_id):
         """Перезапустить текущий трек (для применения bass boost)"""
         guild = bot.get_guild(guild_id)
