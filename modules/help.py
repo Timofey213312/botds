@@ -53,6 +53,13 @@ CATEGORIES = {
         "color": discord.Color.blue(),
         "commands": ["serverinfo", "userinfo", "ping", "avatar", "calc", "remind",
                      "uptime", "poll", "translate", "quote", "fact", "stats"]
+    },
+    "applications": {
+        "name": "📝 Заявки",
+        "description": "Подача заявок на роли",
+        "emoji": "📝",
+        "color": discord.Color.purple(),
+        "commands": ["apply-setup", "apply-panel", "apply-list", "apply-remove"]
     }
 }
 
