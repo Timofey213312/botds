@@ -297,7 +297,6 @@ def setup_moderation(bot):
                         embed=embed,
                         allowed_mentions=discord.AllowedMentions(roles=True)
                     )
-                    await ctx.send("✅ Жалоба отправлена модераторам", ephemeral=True)
                 except discord.Forbidden:
                     # Нет прав писать в канал жалоб — отправляем лично
                     try:

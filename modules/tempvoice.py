@@ -392,7 +392,6 @@ def setup_tempvoice(bot):
 
             view = VoiceSettingsView(bot)
             await settings_channel.send(embed=_build_settings_embed(ctx.author), view=view)
-            await ctx.send(f"✅ Панель размещена в {settings_channel.mention}.", ephemeral=True)
             logger.info(f'{ctx.author} разместил панель в {settings_channel.name}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)

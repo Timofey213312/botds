@@ -1288,7 +1288,6 @@ def setup_music(bot):
 
             if ctx.author.voice and ctx.author.voice.channel:
                 msg = await ctx.author.voice.channel.send(embed=embed, view=view)
-                await ctx.send("✅ Панель отправлена в голосовой канал", ephemeral=True)
             else:
                 msg = await ctx.send(embed=embed, view=view)
 
