@@ -182,6 +182,61 @@ def format_duration(seconds) -> str:
     return f"{minutes}:{secs:02d}"
 
 
+async def search_tracks(query: str, source: str = 'youtube', limit: int = 5):
+    """Поиск нескольких похожих треков через yt-dlp
+
+    source: youtube | soundcloud | yandex
+    Возвращает список словарей треков (макс limit штук)
+    """
+    if not re.match(r'https?://', query):
+        prefixes = {
+            'youtube': 'ytsearch',
+            'soundcloud': 'scsearch',
+            'yandex': 'ymsearch',
+        }
+        prefix = prefixes.get(source, 'ytsearch')
+        query = f'{prefix}{limit}:{query}'
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    def _extract():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(query, download=False)
+            return info
+
+    try:
+        info = await asyncio.to_thread(_extract)
+    except Exception as e:
+        logger.error(f'Ошибка поиска yt-dlp ({source}): {e}')
+        return []
+
+    entries = []
+    if info:
+        if 'entries' in info:
+            entries = [e for e in info['entries'] if e]
+        else:
+            entries = [info]
+
+    tracks = []
+    for e in entries[:limit]:
+        if not e or not e.get('url'):
+            continue
+        tracks.append({
+            'title': e.get('title') or 'Неизвестно',
+            'url': e.get('url'),
+            'webpage_url': e.get('webpage_url') or e.get('original_url') or e.get('url'),
+            'duration': e.get('duration') or 0,
+            'thumbnail': e.get('thumbnail'),
+            'channel': e.get('channel') or e.get('uploader') or 'Неизвестно',
+        })
+    return tracks
+
+
 async def search_track(query: str, source: str = 'youtube'):
     """Поиск трека через yt-dlp, возвращает словарь с данными
 
@@ -917,14 +972,16 @@ def setup_music(bot):
 
             sources = ['youtube', 'soundcloud', 'yandex']
             results = await asyncio.gather(
-                *(search_track(query, s) for s in sources),
+                *(search_tracks(query, s, limit=5) for s in sources),
                 return_exceptions=True,
             )
 
             tracks = []
             for source, res in zip(sources, results):
-                if isinstance(res, dict) and res.get('url'):
-                    tracks.append((source, res))
+                if isinstance(res, list):
+                    for tr in res:
+                        if tr and tr.get('url'):
+                            tracks.append((source, tr))
 
             if not tracks:
                 await ctx.send("❌ Трек не найден ни в одном источнике", ephemeral=True)
@@ -933,7 +990,7 @@ def setup_music(bot):
             view = AutoSearchView(tracks)
             embed = discord.Embed(
                 title="🔎 Найдено треков",
-                description=f"Запрос: **{query}**\nНайдено: **{len(tracks)}** из **{len(sources)}** источников.",
+                description=f"Запрос: **{query}**\nНайдено: **{len(tracks)}** результатов.",
                 color=discord.Color.blurple(),
                 timestamp=datetime.now(),
             )
