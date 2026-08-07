@@ -202,17 +202,24 @@ async def search_tracks(query: str, source: str = 'youtube', limit: int = 5):
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
+        'extract_flat': 'in_playlist',
     }
 
     def _extract():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(query, download=False)
+            try:
+                info = ydl.extract_info(query, download=False)
+            except Exception as e:
+                logger.error(f'Ошибка извлечения ({source}): {e}')
+                return None
             return info
 
     try:
         info = await asyncio.to_thread(_extract)
     except Exception as e:
         logger.error(f'Ошибка поиска yt-dlp ({source}): {e}')
+        return []
+    if not info:
         return []
 
     entries = []
@@ -886,6 +893,12 @@ def setup_music(bot):
                         await interaction.followup.send(f"❌ Не удалось подключиться: {e}", ephemeral=True)
                         return
 
+                # Полное извлечение трека по ссылке (нужен рабочий потоковый URL)
+                if track.get('webpage_url'):
+                    full = await search_track(track['webpage_url'], source)
+                    if full:
+                        track = full
+
                 if vc.is_playing() or vc.is_paused():
                     position = music_player.add_to_queue(interaction.guild_id, track)
                     await interaction.followup.send(
@@ -970,9 +983,9 @@ def setup_music(bot):
             # Обычный текстовый запрос — ищем сразу во всех источниках
             await ctx.send("🔎 Ищу трек во всех источниках...")
 
-            sources = ['youtube', 'soundcloud', 'yandex']
+            sources = ['youtube', 'soundcloud']
             results = await asyncio.gather(
-                *(search_tracks(query, s, limit=5) for s in sources),
+                *(search_tracks(query, s, limit=8) for s in sources),
                 return_exceptions=True,
             )
 
