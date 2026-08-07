@@ -49,6 +49,20 @@ CATEGORIES = {
         "color": discord.Color.blue(),
         "commands": ["serverinfo", "userinfo", "ping", "avatar", "calc", "remind",
                      "uptime", "poll", "translate", "quote", "fact", "stats"]
+    },
+    "ideas": {
+        "name": "💡 Идеи",
+        "description": "Предложения идей для сервера",
+        "emoji": "💡",
+        "color": discord.Color.purple(),
+        "commands": ["idea-panel"]
+    },
+    "partners": {
+        "name": "🤝 Партнёрства",
+        "description": "Заявки на партнёрство",
+        "emoji": "🤝",
+        "color": discord.Color.dark_magenta(),
+        "commands": ["partner-panel"]
     }
 }
 
