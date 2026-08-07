@@ -422,6 +422,18 @@ def setup_tempvoice(bot):
             logger.error(f'Ошибка tempvoice_handler: {e}')
 
     bot.add_view(VoiceSettingsView(bot))
+    from modules.panels import register_panel
+
+    def _build_voice_panel(guild):
+        return _build_settings_embed(guild.me), VoiceSettingsView(bot)
+
+    register_panel(
+        channel_keywords=SETTINGS_CHANNEL_KEYWORDS,
+        label="Переименовать",
+        expected_ids=["tv_rename", "tv_limit", "tv_lock", "tv_hide",
+                      "tv_mute", "tv_kick", "tv_transfer", "tv_delete"],
+        build=_build_voice_panel,
+    )
     logger.info("Модуль временных войс-каналов загружен (persistent views: tv_rename, tv_limit, tv_lock, tv_hide, tv_mute, tv_kick, tv_transfer, tv_delete)")
 
 

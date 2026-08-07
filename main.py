@@ -217,6 +217,13 @@ class DiscordBot(commands.Bot):
             )
         )
 
+        # Авто-восстановление панелей с кнопками (устаревшие custom_id пересоздаются)
+        try:
+            from modules.panels import restore_panels
+            asyncio.create_task(restore_panels(self))
+        except Exception as e:
+            logger.error(f'Ошибка запуска автовосстановления панелей: {e}')
+
 # Создаем экземпляр бота
 bot = DiscordBot()
 

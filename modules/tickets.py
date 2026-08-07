@@ -324,4 +324,20 @@ def setup_tickets(bot):
 
     bot.add_view(OpenTicketButton())
     bot.add_view(CloseTicketButton())
+    from modules.panels import register_panel
+
+    def _build_ticket_panel(guild):
+        embed = discord.Embed(
+            title="🎫 Система тикетов",
+            description="Нажмите кнопку ниже, чтобы создать тикет и связаться с администрацией.",
+            color=EMBED_COLOR,
+        )
+        return embed, OpenTicketButton()
+
+    register_panel(
+        channel_keywords=('ticket', 'тикет'),
+        label="🎫 Открыть тикет",
+        expected_ids=["ticket_open"],
+        build=_build_ticket_panel,
+    )
     logger.info(f'Модуль тикетов загружен (persistent views: ticket_open, ticket_close)')

@@ -189,4 +189,21 @@ def setup_ideas(bot):
 
     bot.add_view(IdeaPanelView())
     bot.add_view(IdeaModerationView())
+    from modules.panels import register_panel
+
+    def _build_idea_panel(guild):
+        embed = discord.Embed(
+            title="💡 Предложи идею",
+            description="Нажми кнопку ниже, чтобы отправить свою идею.\n"
+                        "Администрация рассмотрит её и поставит статус.",
+            color=EMBED_COLOR,
+        )
+        return embed, IdeaPanelView()
+
+    register_panel(
+        channel_keywords=PANEL_CHANNEL_KEYWORDS,
+        label="💡 Предложить идею",
+        expected_ids=["idea_panel_open"],
+        build=_build_idea_panel,
+    )
     logger.info('Модуль идей загружен (persistent views: idea_panel_open, idea_approve, idea_reject)')
