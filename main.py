@@ -192,29 +192,6 @@ class DiscordBot(commands.Bot):
             )
         ''')
         
-        await self.db.execute('''
-            CREATE TABLE IF NOT EXISTS applications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id INTEGER,
-                name TEXT,
-                role_id INTEGER,
-                channel_id INTEGER,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        await self.db.execute('''
-            CREATE TABLE IF NOT EXISTS apply_submissions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message_id INTEGER,
-                user_id INTEGER,
-                guild_id INTEGER,
-                application_id INTEGER,
-                status TEXT DEFAULT 'pending',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
         await self.db.commit()
         logger.info("База данных инициализирована")
         
@@ -265,7 +242,6 @@ from modules.tempvoice import setup_tempvoice
 from modules.logger import setup_logger
 from modules.ideas import setup_ideas
 from modules.panels import setup_panels
-from modules.applications import setup_applications
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -283,7 +259,6 @@ _setups = {
     "logger": setup_logger,
     "ideas": setup_ideas,
     "panels": setup_panels,
-    "applications": setup_applications,
 }
 for _name, _fn in _setups.items():
     try:
