@@ -899,12 +899,25 @@ def setup_music(bot):
                     if full:
                         track = full
                     else:
+                        # Трек недоступен (DRM) — пробуем найти то же на YouTube
                         await interaction.followup.send(
-                            f"❌ **{track['title']}** недоступен для воспроизведения (DRM или ограничение). "
-                            f"Выбери другой трек.",
+                            f"⚠️ **{track['title']}** недоступен ({self.SOURCES.get(source, source)}). "
+                            f"Ищу на YouTube...",
                             ephemeral=True,
                         )
-                        return
+                        yt = await search_track(track['title'], 'youtube')
+                        if not yt:
+                            await interaction.followup.send(
+                                f"❌ Не удалось найти аналог на YouTube. Попробуй другой трек.",
+                                ephemeral=True,
+                            )
+                            return
+                        track = yt
+                        source = 'youtube'
+                        await interaction.followup.send(
+                            f"▶️ Найден аналог на YouTube: **{track['title']}**",
+                            ephemeral=True,
+                        )
 
                 if vc.is_playing() or vc.is_paused():
                     position = music_player.add_to_queue(interaction.guild_id, track)
