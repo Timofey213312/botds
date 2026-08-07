@@ -312,6 +312,20 @@ async def on_command_error(ctx, error):
         await ctx.send("❌ У бота недостаточно прав для выполнения этой команды.", ephemeral=True)
     elif isinstance(error, commands.CommandOnCooldown):
         await ctx.send(f"⏰ Эта команда на перезарядке. Попробуйте через {error.retry_after:.1f} секунд.", ephemeral=True)
+    elif isinstance(error, commands.BadArgument):
+        # Неверные аргументы (роль/канал не найдены и т.п.)
+        await ctx.send(
+            f"❌ Не удалось разобрать аргументы команды: {error}\n\n"
+            "💡 Для команд с несколькими параметрами используй slash-версию: "
+            f"`/{ctx.command.name}` — там поля указываются отдельно.",
+            ephemeral=True
+        )
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(
+            f"❌ Не хватает аргумента: `{error.param.name}`. "
+            f"Пример: `/{ctx.command.name}` — поля подскажут.",
+            ephemeral=True
+        )
     else:
         logger.error(f"Ошибка команды: {error}")
         await ctx.send("❌ Произошла ошибка при выполнении команды.", ephemeral=True)
