@@ -15,7 +15,7 @@ from discord.ext import commands
 logger = logging.getLogger('discord_bot.ideas')
 
 EMBED_COLOR = 0x9000FF
-IDEAS_CHANNEL_KEYWORDS = ('idea', 'иде', 'suggest')
+IDEAS_CHANNEL_KEYWORDS = ('idea', 'иде', 'suggest', 'приём-заявок', 'прием-заявок', 'приём', 'прием')
 STATUS_UNDER_REVIEW = '📝 На рассмотрении'
 STATUS_APPROVED = '✅ Принято'
 STATUS_REJECTED = '❌ Отклонено'
