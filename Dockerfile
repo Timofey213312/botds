@@ -12,6 +12,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# yt-dlp регулярно ломается YouTube — ставим всегда свежую версию
+RUN pip install --no-cache-dir -U yt-dlp
+
 # Копируем код
 COPY . .
 
