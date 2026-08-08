@@ -90,7 +90,7 @@ def _build_main_embed(bot):
             value="Нажми кнопку ниже, чтобы увидеть команды",
             inline=True
         )
-    embed.set_footer(text="Нажми кнопку с категорией, чтобы увидеть её команды")
+    embed.set_footer(text=f"Нажми кнопку с категорией, чтобы увидеть её команды • {_footer()}")
     return embed
 
 
@@ -118,7 +118,7 @@ def _build_category_embed(bot, cat_key):
             value=cmd.description or "Описание не указано",
             inline=False
         )
-    embed.set_footer(text=f"Всего команд в категории: {len(commands_list)}")
+    embed.set_footer(text=f"Всего команд в категории: {len(commands_list)} • {_footer()}")
     return embed
 
 
@@ -197,6 +197,13 @@ class CloseButton(discord.ui.Button):
             await interaction.message.delete()
         except Exception:
             pass
+
+
+HELP_VERSION = "v3"
+
+
+def _footer():
+    return f"Сборка {HELP_VERSION} • Кнопки: {len(CATEGORIES) + 2}"
 
 
 def setup_help(bot):
