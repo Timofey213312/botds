@@ -394,7 +394,8 @@ def setup_music(bot):
 
     from modules.yandex_music import (is_yandex_url, fetch_yandex_playlist,
                                       fetch_yandex_single_track, get_token,
-                                      make_session, _parse_track_url)
+                                      make_session, _parse_track_url,
+                                      YandexError)
 
     music_player = MusicPlayer(bot)
 
@@ -986,7 +987,11 @@ def setup_music(bot):
                 try:
                     ym_type, _ = _parse_track_url(query)
                     if ym_type == 'track':
-                        tr = await fetch_yandex_single_track(ym_session, query, ym_token)
+                        try:
+                            tr = await fetch_yandex_single_track(ym_session, query, ym_token)
+                        except YandexError as e:
+                            await ctx.send(f"❌ {e}", ephemeral=True)
+                            return
                         if not tr:
                             await ctx.send("❌ Не удалось загрузить трек из Яндекс Музыки", ephemeral=True)
                             return
@@ -1003,7 +1008,11 @@ def setup_music(bot):
 
                     note = "" if ym_token else "\n⚠️ Без токена играют 30-секундные превью. Добавь `YANDEX_MUSIC_TOKEN` (подписка Плюс) для полных треков."
                     await ctx.send(f"📂 Загружаю плейлист Яндекс Музыки...{note}")
-                    title, ym_tracks = await fetch_yandex_playlist(ym_session, query, ym_token, limit=50)
+                    try:
+                        title, ym_tracks = await fetch_yandex_playlist(ym_session, query, ym_token, limit=50)
+                    except YandexError as e:
+                        await ctx.send(f"❌ {e}", ephemeral=True)
+                        return
                     if not ym_tracks:
                         await ctx.send("❌ Плейлист не найден или пуст", ephemeral=True)
                         return
@@ -1119,7 +1128,11 @@ def setup_music(bot):
                 try:
                     note = "" if ym_token else "\n⚠️ Без токена играют 30-секундные превью. Добавь `YANDEX_MUSIC_TOKEN` (подписка Плюс) для полных треков."
                     await ctx.send(f"📂 Загружаю плейлист Яндекс Музыки...{note}")
-                    title, ym_tracks = await fetch_yandex_playlist(ym_session, url, ym_token, limit=50)
+                    try:
+                        title, ym_tracks = await fetch_yandex_playlist(ym_session, url, ym_token, limit=50)
+                    except YandexError as e:
+                        await ctx.send(f"❌ {e}", ephemeral=True)
+                        return
                     if not ym_tracks:
                         await ctx.send("❌ Плейлист не найден или пуст", ephemeral=True)
                         return

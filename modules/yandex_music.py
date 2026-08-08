@@ -215,43 +215,39 @@ async def _tracks_to_bot_format(session, tracks, token):
 
 
 async def fetch_yandex_playlist(session, url, token=None, limit=50):
-    """Основная функция: по ссылке возвращает (название, [треки в формате бота])"""
-    try:
-        title, tracks = await _playlist_tracks(session, url, token)
-        if not tracks:
-            return None, []
-        bot_tracks = await _tracks_to_bot_format(session, tracks[:limit], token)
-        return title, bot_tracks
-    except YandexError as e:
-        logger.warning(f'Яндекс Музыка: {e}')
+    """Основная функция: по ссылке возвращает (название, [треки в формате бота]).
+
+    Бросает YandexError с понятным сообщением при реальных ошибках.
+    Возвращает (None, []) только если плейлист действительно не найден или пуст.
+    """
+    title, tracks = await _playlist_tracks(session, url, token)
+    if not tracks:
         return None, []
-    except Exception as e:
-        logger.error(f'Ошибка Яндекс Музыки: {e}')
-        return None, []
+    bot_tracks = await _tracks_to_bot_format(session, tracks[:limit], token)
+    if not bot_tracks and tracks:
+        raise YandexError('Треки плейлиста найдены, но не удалось получить ссылки на mp3 '
+                          '(регион или недоступно без подписки)')
+    return title, bot_tracks
 
 
 async def fetch_yandex_single_track(session, url, token=None):
     """По ссылке на трек возвращает трек в формате бота или None"""
-    try:
-        kind_type, params = _parse_track_url(url)
-        if kind_type != 'track':
-            return None
-        track_id, album_id = params['track'], params['album']
-        info = await _fetch_track_info(session, track_id, album_id, token)
-        direct = await _build_direct_url(session, track_id, album_id, token)
-        if not info or not direct:
-            return None
-        return {
-            'title': info['title'],
-            'url': direct,
-            'webpage_url': url,
-            'duration': info['duration'],
-            'thumbnail': info['thumbnail'],
-            'channel': info['channel'],
-        }
-    except Exception as e:
-        logger.error(f'Ошибка получения трека Яндекса: {e}')
+    kind_type, params = _parse_track_url(url)
+    if kind_type != 'track':
         return None
+    track_id, album_id = params['track'], params['album']
+    info = await _fetch_track_info(session, track_id, album_id, token)
+    direct = await _build_direct_url(session, track_id, album_id, token)
+    if not info or not direct:
+        raise YandexError('Не удалось получить ссылку на mp3 трека (регион или недоступно без подписки)')
+    return {
+        'title': info['title'],
+        'url': direct,
+        'webpage_url': url,
+        'duration': info['duration'],
+        'thumbnail': info['thumbnail'],
+        'channel': info['channel'],
+    }
 
 
 async def make_session():
