@@ -413,23 +413,33 @@ def setup_logger(bot):
 
             await ctx.send(embed=embed, ephemeral=True)
 
-            # Отправляем тестовый лог кика, чтобы проверить реальную доставку
-            test_embed = discord.Embed(
-                title="Тестовый лог",
-                description=f"Проверка системы логов от {ctx.author.mention}",
-                color=0x9000FF,
-                timestamp=discord.utils.utcnow(),
-            )
-            sent = await _send_log(bot, ctx.guild, test_embed, 'kick')
-            if sent:
-                await ctx.send("Тестовый лог отправлен в канал логов.", ephemeral=True)
+            # Отправляем тестовый лог в каждый тип логов, чтобы проверить доставку
+            results = []
+            for key, label, color in (
+                ('ban', 'Баны', BAN_COLOR),
+                ('unban', 'Разбаны', UNBAN_COLOR),
+                ('kick', 'Кики', KICK_COLOR),
+                ('timeout', 'Тайм-ауты', TIMEOUT_COLOR),
+            ):
+                test_embed = discord.Embed(
+                    title=f"Тестовый лог — {label}",
+                    description=f"Проверка системы логов от {ctx.author.mention}",
+                    color=color,
+                    timestamp=discord.utils.utcnow(),
+                )
+                sent = await _send_log(bot, ctx.guild, test_embed, key)
+                results.append(f"{label}: {'OK' if sent else 'НЕТ канала'}")
+
+            sent_count = sum(1 for r in results if 'OK' in r)
+            if sent_count == len(results):
+                await ctx.send("Тестовые логи отправлены во все каналы логов.", ephemeral=True)
             else:
                 await ctx.send(
-                    "Тестовый лог НЕ отправлен. Создай канал с «логи» в названии "
-                    "или настрой через `!set-log kick #канал`.",
+                    "Некоторые тестовые логи не отправлены:\n" + "\n".join(results)
+                    + "\nСоздай каналы #баны, #разбаны, #кики, #тайм-ауты или общий #логи.",
                     ephemeral=True,
                 )
-            logger.info(f'{ctx.author} проверил логи')
+            logger.info(f'{ctx.author} проверил логи: {"; ".join(results)}')
         except Exception as e:
             await ctx.send(f"Ошибка: {e}", ephemeral=True)
             logger.error(f'Ошибка log-check: {e}')
