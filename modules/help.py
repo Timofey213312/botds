@@ -109,13 +109,19 @@ def _build_category_embed(bot, cat_key):
         color=cat['color'],
         timestamp=datetime.now()
     )
-    for cmd in commands_list:
-        params = ""
-        for param in cmd.clean_params:
-            params += f" [{param}]"
+    # Discord ограничивает embed 25 полями, поэтому группируем команды
+    # по 10 в одно поле
+    for i in range(0, len(commands_list), 10):
+        chunk = commands_list[i:i + 10]
+        lines = []
+        for cmd in chunk:
+            params = ""
+            for param in cmd.clean_params:
+                params += f" [{param}]"
+            lines.append(f"`{bot.command_prefix}{cmd.name}{params}` — {cmd.description or 'Описание не указано'}")
         embed.add_field(
-            name=f"{bot.command_prefix}{cmd.name}{params}",
-            value=cmd.description or "Описание не указано",
+            name=f"Команды {i + 1}–{i + len(chunk)} из {len(commands_list)}",
+            value="\n".join(lines),
             inline=False
         )
     embed.set_footer(text=f"Всего команд в категории: {len(commands_list)} • {_footer()}")
