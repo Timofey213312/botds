@@ -146,17 +146,6 @@ class DiscordBot(commands.Bot):
         ''')
         
         await self.db.execute('''
-            CREATE TABLE IF NOT EXISTS economy_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                description TEXT,
-                price INTEGER,
-                type TEXT,
-                effect TEXT
-            )
-        ''')
-        
-        await self.db.execute('''
             CREATE TABLE IF NOT EXISTS reminders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -230,8 +219,6 @@ bot = DiscordBot()
 # Импортируем модули команд
 from modules.moderation import setup_moderation
 from modules.music import setup_music
-from modules.economy import setup_economy
-from modules.games import setup_games
 from modules.utilities import setup_utilities
 from modules.help import setup_help
 from modules.welcome import setup_welcome
@@ -247,8 +234,6 @@ from modules.panels import setup_panels
 _setups = {
     "moderation": setup_moderation,
     "music": setup_music,
-    "economy": setup_economy,
-    "games": setup_games,
     "utilities": setup_utilities,
     "help": setup_help,
     "welcome": setup_welcome,

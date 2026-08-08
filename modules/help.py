@@ -32,20 +32,6 @@ CATEGORIES = {
                      "queue", "nowplaying", "volume", "bassboost", "loop", "loopqueue",
                      "shuffle", "panel"]
     },
-    "economy": {
-        "name": "Экономика",
-        "description": "Экономическая система с XP, уровнями и магазином",
-        "emoji": "💰",
-        "color": discord.Color.gold(),
-        "commands": ["balance", "daily", "pay", "work", "leaderboard", "shop", "buy"]
-    },
-    "games": {
-        "name": "Игры",
-        "description": "Мини-игры и развлечения",
-        "emoji": "🎮",
-        "color": discord.Color.blurple(),
-        "commands": ["8ball", "coinflip", "guess", "quest"]
-    },
     "utilities": {
         "name": "Утилиты",
         "description": "Полезные команды и информация",
@@ -57,7 +43,7 @@ CATEGORIES = {
 }
 
 # Порядок отображения команд
-CATEGORY_ORDER = ["moderation", "music", "economy", "games", "utilities"]
+CATEGORY_ORDER = ["moderation", "music", "utilities"]
 
 
 def _get_commands(bot, cat_key=None):
@@ -140,7 +126,7 @@ def setup_help(bot):
     """Настройка команды помощи"""
 
     @bot.hybrid_command(name="help", description="Показать все команды бота")
-    @app_commands.describe(category="Категория команд (moderation, music, economy, games, utilities)")
+    @app_commands.describe(category="Категория команд (moderation, music, utilities)")
     async def help_cmd(ctx: commands.Context, category: str = None):
         """Команда помощи по боту"""
         try:
