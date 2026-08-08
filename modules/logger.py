@@ -152,10 +152,25 @@ def _log_embed(title, color, action, target, executor, reason, guild):
     def _user_field(name, user):
         if user is None:
             return "неизвестно"
+        # В audit log target бывает неразрешённым (<Object id=...>) —
+        # пробуем получить реального участника из кэша гильдии по ID
+        resolved = user
         try:
-            return f"{user.mention}\n({user.name} · ID: `{user.id}`)"
-        except Exception:
-            return f"{user}"
+            uid = int(user.id)
+        except (AttributeError, TypeError, ValueError):
+            uid = None
+        if guild is not None and uid is not None:
+            resolved = guild.get_member(uid) or guild.get_user(uid) or user
+
+        display = getattr(resolved, 'display_name', None) or getattr(resolved, 'name', None)
+        if uid is not None and display is None:
+            display = f"ID {uid}"
+        # Гарантированный фолбэк — упоминание по ID работает всегда
+        if uid is not None:
+            mention = f"<@{uid}>"
+        else:
+            mention = f"{resolved}"
+        return f"{mention}\n({display} · ID: `{uid}`)"
 
     embed = discord.Embed(
         title=title,
