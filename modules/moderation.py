@@ -422,11 +422,19 @@ def setup_moderation(bot):
                 ban_embed.add_field(name="Причина", value=ban_reason, inline=False)
                 ban_embed.add_field(name="Всего предупреждений", value=str(count), inline=True)
                 await ctx.send(embed=ban_embed)
+
+                # Очищаем предупреждения пользователя после бана
+                await bot.db.execute(
+                    "DELETE FROM warnings WHERE user_id = ? AND guild_id = ?",
+                    (member.id, ctx.guild.id)
+                )
+                await bot.db.commit()
+
                 try:
                     await member.send(f"🔨 Вы были забанены на сервере **{ctx.guild.name}** за превышение лимита предупреждений ({count} из {WARN_BAN_LIMIT}).")
                 except:
                     pass
-                logger.info(f'Авто-бан {member.name} за превышение лимита предупреждений ({count})')
+                logger.info(f'Авто-бан {member.name} за превышение лимита предупреждений ({count}), предупреждения очищены')
 
         except Exception as e:
             await ctx.send(f"❌ Ошибка при выдаче предупреждения: {e}", ephemeral=True)
