@@ -143,9 +143,18 @@ class CategoryButton(discord.ui.Button):
         self.cat_key = cat_key
 
     async def callback(self, interaction: discord.Interaction):
-        if not isinstance(self.view, HelpView):
-            return
-        await self.view.show(interaction, self.cat_key)
+        try:
+            if not isinstance(self.view, HelpView):
+                return
+            await self.view.show(interaction, self.cat_key)
+        except Exception as e:
+            logger.error(f'Ошибка кнопки help_cat_{self.cat_key}: {e}', exc_info=True)
+            try:
+                await interaction.response.send_message(
+                    f"❌ Ошибка: {e}", ephemeral=True
+                )
+            except Exception:
+                pass
 
 
 class BackButton(discord.ui.Button):
