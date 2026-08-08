@@ -80,13 +80,6 @@ def setup_moderation(bot):
             
             await ctx.send(embed=embed)
 
-            # Лог в канал логов
-            mod_log = getattr(bot, 'mod_log', None)
-            if mod_log:
-                try:
-                    await mod_log(bot, ctx.guild, "kick", "👢 Участник кикнут", 0xE67E22, member, ctx.author, reason)
-                except Exception as e:
-                    logger.error(f'Ошибка лога кика: {e}')            
             # Уведомляем участника
             try:
                 await member.send(f"Вы были кикнуты с сервера **{ctx.guild.name}**\n**Причина:** {reason}")
@@ -126,14 +119,6 @@ def setup_moderation(bot):
             
             await ctx.send(embed=embed)
 
-            # Лог в канал логов
-            mod_log = getattr(bot, 'mod_log', None)
-            if mod_log:
-                try:
-                    await mod_log(bot, ctx.guild, "ban", "🔨 Участник забанен", 0xE74C3C, member, ctx.author, reason)
-                except Exception as e:
-                    logger.error(f'Ошибка лога бана: {e}')
-            
             # Уведомляем участника
             try:
                 await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**\n**Причина:** {reason}")
@@ -192,14 +177,6 @@ def setup_moderation(bot):
             await ctx.send(embed=embed)
             logger.info(f'{ctx.author} выдал мут {member.name} на {minutes} минут по причине: {reason}')
 
-            # Лог в канал логов
-            mod_log = getattr(bot, 'mod_log', None)
-            if mod_log:
-                try:
-                    await mod_log(bot, ctx.guild, f"timeout ({minutes} мин)", "🔇 Участник замучен", 0x9B59B6, member, ctx.author, reason)
-                except Exception as e:
-                    logger.error(f'Ошибка лога мута: {e}')
-            
             # Автоматическое снятие мута
             async def remove_mute_after_time():
                 await asyncio.sleep(minutes * 60)
@@ -257,14 +234,6 @@ def setup_moderation(bot):
             await ctx.send(embed=embed)
             logger.info(f'{ctx.author} выдал таймаут {member.name} на {minutes} минут по причине: {reason}')
 
-            # Лог в канал логов
-            mod_log = getattr(bot, 'mod_log', None)
-            if mod_log:
-                try:
-                    await mod_log(bot, ctx.guild, f"timeout ({minutes} мин)", "🔇 Участник в тайм-ауте", 0x9B59B6, member, ctx.author, reason)
-                except Exception as e:
-                    logger.error(f'Ошибка лога таймаута: {e}')
-            
         except Exception as e:
             await ctx.send(f"❌ Ошибка при выдаче таймаута: {e}", ephemeral=True)
             logger.error(f'Ошибка таймаута: {e}')
@@ -293,14 +262,6 @@ def setup_moderation(bot):
             await ctx.send(embed=embed)
             logger.info(f'{ctx.author} снял таймаут с {member.name} по причине: {reason}')
 
-            # Лог в канал логов
-            mod_log = getattr(bot, 'mod_log', None)
-            if mod_log:
-                try:
-                    await mod_log(bot, ctx.guild, "untimeout", "🔓 Тайм-аут снят", 0x1ABC9C, member, ctx.author, reason)
-                except Exception as e:
-                    logger.error(f'Ошибка лога снятия таймаута: {e}')
-            
         except Exception as e:
             await ctx.send(f"❌ Ошибка при снятии таймаута: {e}", ephemeral=True)
             logger.error(f'Ошибка снятия таймаута: {e}')
@@ -391,14 +352,6 @@ def setup_moderation(bot):
             embed.add_field(name="Причина", value=reason, inline=False)
             await ctx.send(embed=embed)
             logger.info(f'{ctx.author} разбанил {target.name} по причине: {reason}')
-
-            # Лог в канал логов
-            mod_log = getattr(bot, 'mod_log', None)
-            if mod_log:
-                try:
-                    await mod_log(bot, ctx.guild, "unban", "⚖️ Снят бан", 0x2ECC71, target, ctx.author, reason)
-                except Exception as e:
-                    logger.error(f'Ошибка лога разбана: {e}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка при разбане: {e}", ephemeral=True)
             logger.error(f'Ошибка разбана: {e}')

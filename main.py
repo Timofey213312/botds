@@ -226,7 +226,6 @@ from modules.rules import setup_rules
 from modules.tickets import setup_tickets
 from modules.autoclean import setup_autoclean
 from modules.tempvoice import setup_tempvoice
-from modules.logger import setup_logger
 from modules.ideas import setup_ideas
 from modules.panels import setup_panels
 
@@ -241,7 +240,6 @@ _setups = {
     "tickets": setup_tickets,
     "autoclean": setup_autoclean,
     "tempvoice": setup_tempvoice,
-    "logger": setup_logger,
     "ideas": setup_ideas,
     "panels": setup_panels,
 }
