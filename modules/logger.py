@@ -1,6 +1,7 @@
 """
 Модуль логов модерации
-Фиксирует кики, баны и разбаны в канале для логов
+Единый источник — audit log: кики, баны, разбаны и тайм-ауты.
+Действия через команды бота логируются напрямую (mod_log) с реальным модератором.
 """
 
 import logging
@@ -273,72 +274,6 @@ def setup_logger(bot):
 
         except Exception as e:
             logger.error(f'Ошибка обработки лога: {e}')
-
-    # Резервное логирование через on_member_ban/on_member_unban (для надёжности)
-    @bot.listen('on_member_ban')
-    async def log_ban(guild, user):
-        try:
-            # Если audit log уже записал — не дублируем
-            embed = discord.Embed(
-                title="🔨 Участник забанен",
-                description=f"**{user}** (`{user.id}`) забанен",
-                color=BAN_COLOR,
-                timestamp=datetime.now()
-            )
-            embed.set_footer(text=f"Сервер: {guild.name}")
-            await _send_log(bot, guild, embed, 'ban')
-        except Exception as e:
-            logger.error(f'Ошибка резервного лога бана: {e}')
-
-    @bot.listen('on_member_unban')
-    async def log_unban(guild, user):
-        try:
-            embed = discord.Embed(
-                title="⚖️ Снят бан",
-                description=f"**{user}** (`{user.id}`) разбанен",
-                color=UNBAN_COLOR,
-                timestamp=datetime.now()
-            )
-            embed.set_footer(text=f"Сервер: {guild.name}")
-            await _send_log(bot, guild, embed, 'unban')
-        except Exception as e:
-            logger.error(f'Ошибка резервного лога разбана: {e}')
-
-    @bot.listen('on_member_remove')
-    async def log_member_remove(member):
-        """Резервное логирование киков: проверяем audit log, был ли это кик,
-        и кик сделан не ботом (командой) — чтобы не дублировать лог из !kick"""
-        try:
-            guild = member.guild
-            if not guild or member.id == bot.user.id:
-                return
-            try:
-                # Ищем последнюю запись кика
-                async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
-                    if entry.target and entry.target.id == member.id:
-                        # Кик через команду бота уже залогирован mod_log — пропускаем
-                        if entry.user and entry.user.id == bot.user.id:
-                            return
-                        embed = _log_embed(
-                            title="👢 Участник кикнут",
-                            color=KICK_COLOR,
-                            action="Кик",
-                            target=entry.target,
-                            executor=entry.user,
-                            reason=entry.reason,
-                            guild=guild,
-                        )
-                        await _send_log(bot, guild, embed, 'kick')
-                        logger.info(f'ЛОГ: кик {member} от {entry.user}')
-                        return
-                logger.info(f'Участник {member} покинул сервер {guild.name} (не кик)')
-            except discord.Forbidden:
-                # Нет права на audit log — не можем определить кик, пропускаем
-                logger.warning(f'Нет права просмотра audit log на {guild.name}, ручной кик не залогирован')
-            except Exception as e:
-                logger.error(f'Ошибка проверки кика: {e}')
-        except Exception as e:
-            logger.error(f'Ошибка on_member_remove: {e}')
 
     @bot.hybrid_command(name="set-log", description="Указать каналы для логов модерации")
     @app_commands.describe(type="Тип логов: ban, unban, kick, timeout")
