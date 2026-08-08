@@ -1,6 +1,6 @@
 """
 Модуль помощи и информации о командах бота
-Команды: help (автоматическая)
+Команды: help (автоматическая), без кнопок
 """
 
 import discord
@@ -56,6 +56,9 @@ CATEGORIES = {
     }
 }
 
+# Порядок отображения команд
+CATEGORY_ORDER = ["moderation", "music", "economy", "games", "utilities"]
+
 
 def _get_commands(bot, cat_key=None):
     """Все видимые команды (или только категории). Безопасно."""
@@ -72,6 +75,14 @@ def _get_commands(bot, cat_key=None):
     return result
 
 
+def _format_cmd(bot, cmd):
+    """Формат одной команды: `!name [param]` — описание"""
+    params = ""
+    for param in cmd.clean_params:
+        params += f" [{param}]"
+    return f"`{bot.command_prefix}{cmd.name}{params}` — {cmd.description or 'Описание не указано'}"
+
+
 def _build_main_embed(bot):
     """Общая помощь: список категорий"""
     all_cmds = _get_commands(bot)
@@ -79,18 +90,21 @@ def _build_main_embed(bot):
         title="📚 Помощь по командам бота",
         description=f"Префикс команд: **{bot.command_prefix}**\n"
                     f"Также поддерживаются slash-команды (`/команда`)\n"
-                    f"Всего команд: **{len(all_cmds)}**",
+                    f"Всего команд: **{len(all_cmds)}**\n\n"
+                    f"Используй `{bot.command_prefix}help <категория>` для подробностей.\n"
+                    f"Категории: {', '.join('`' + k + '`' for k in CATEGORY_ORDER)}",
         color=discord.Color.blue(),
         timestamp=datetime.now()
     )
-    for cat_key, cat_info in CATEGORIES.items():
+    for cat_key in CATEGORY_ORDER:
+        cat = CATEGORIES[cat_key]
         count = len(_get_commands(bot, cat_key))
         embed.add_field(
-            name=f"{cat_info['emoji']} {cat_info['name']} ({count} команд)",
-            value="Нажми кнопку ниже, чтобы увидеть команды",
+            name=f"{cat['emoji']} {cat['name']} ({count} команд)",
+            value=f"`{bot.command_prefix}help {cat_key}`",
             inline=True
         )
-    embed.set_footer(text=f"Нажми кнопку с категорией, чтобы увидеть её команды • {_footer()}")
+    embed.set_footer(text=f"Пример: {bot.command_prefix}help moderation")
     return embed
 
 
@@ -109,115 +123,21 @@ def _build_category_embed(bot, cat_key):
         color=cat['color'],
         timestamp=datetime.now()
     )
-    # Discord ограничивает embed 25 полями, поэтому группируем команды
-    # по 10 в одно поле
+    # Discord ограничивает embed 25 полями, поэтому группируем команды по 10
     for i in range(0, len(commands_list), 10):
         chunk = commands_list[i:i + 10]
-        lines = []
-        for cmd in chunk:
-            params = ""
-            for param in cmd.clean_params:
-                params += f" [{param}]"
-            lines.append(f"`{bot.command_prefix}{cmd.name}{params}` — {cmd.description or 'Описание не указано'}")
+        lines = [_format_cmd(bot, cmd) for cmd in chunk]
         embed.add_field(
             name=f"Команды {i + 1}–{i + len(chunk)} из {len(commands_list)}",
             value="\n".join(lines),
             inline=False
         )
-    embed.set_footer(text=f"Всего команд в категории: {len(commands_list)} • {_footer()}")
+    embed.set_footer(text=f"Всего команд в категории: {len(commands_list)}")
     return embed
-
-
-class HelpView(discord.ui.View):
-    """Постоянная кнопочная навигация по помощи (persistent)"""
-
-    def __init__(self):
-        super().__init__(timeout=None)
-        self._add_all_buttons()
-
-    def _add_all_buttons(self):
-        for i, cat_key in enumerate(CATEGORIES):
-            cat = CATEGORIES[cat_key]
-            self.add_item(CategoryButton(cat_key, row=i // 3))
-        self.add_item(BackButton(row=3))
-        self.add_item(CloseButton(row=3))
-
-    async def show(self, interaction, cat_key=None):
-        """Переключить содержимое панели"""
-        bot = interaction.client
-        if cat_key is None:
-            embed = _build_main_embed(bot)
-        else:
-            embed = _build_category_embed(bot, cat_key)
-        await interaction.response.edit_message(embed=embed, view=self)
-
-
-class CategoryButton(discord.ui.Button):
-    """Кнопка выбора категории"""
-
-    def __init__(self, cat_key, row=0):
-        cat = CATEGORIES[cat_key]
-        super().__init__(
-            label=cat["name"], style=discord.ButtonStyle.secondary, emoji=cat["emoji"],
-            custom_id=f"help_cat_{cat_key}", row=row,
-        )
-        self.cat_key = cat_key
-
-    async def callback(self, interaction: discord.Interaction):
-        view = self.view
-        if not isinstance(view, HelpView):
-            await interaction.response.send_message("❌ Панель устарела, вызови `!help` заново.", ephemeral=True)
-            return
-        await view.show(interaction, self.cat_key)
-
-
-class BackButton(discord.ui.Button):
-    """Кнопка возврата к общему списку"""
-
-    def __init__(self, row=3):
-        super().__init__(
-            label="Главная", style=discord.ButtonStyle.primary,
-            custom_id="help_back", row=row,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        view = self.view
-        if not isinstance(view, HelpView):
-            await interaction.response.send_message("❌ Панель устарела, вызови `!help` заново.", ephemeral=True)
-            return
-        await view.show(interaction, None)
-
-
-class CloseButton(discord.ui.Button):
-    """Кнопка закрытия помощи"""
-
-    def __init__(self, row=3):
-        super().__init__(
-            label="Закрыть", style=discord.ButtonStyle.danger,
-            custom_id="help_close", row=row,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            await interaction.response.defer()
-            await interaction.message.delete()
-        except Exception:
-            pass
-
-
-HELP_VERSION = "v3"
-
-
-def _footer():
-    return f"Сборка {HELP_VERSION} • Кнопки: {len(CATEGORIES) + 2}"
 
 
 def setup_help(bot):
     """Настройка команды помощи"""
-
-    # Регистрируем постоянную панель помощи (работает после рестарта)
-    bot.help_view = HelpView()
-    bot.add_view(bot.help_view)
 
     @bot.hybrid_command(name="help", description="Показать все команды бота")
     @app_commands.describe(category="Категория команд (moderation, music, economy, games, utilities)")
@@ -228,7 +148,7 @@ def setup_help(bot):
                 embed = _build_category_embed(bot, category.lower())
             else:
                 embed = _build_main_embed(bot)
-            await ctx.send(embed=embed, view=bot.help_view)
+            await ctx.send(embed=embed)
             logger.info(f'{ctx.author} использовал команду help')
         except Exception as e:
             logger.error(f'Ошибка help: {e}', exc_info=True)
@@ -239,8 +159,8 @@ def setup_help(bot):
     async def help_category_autocomplete(interaction, current):
         choices = [
             app_commands.Choice(name=f"{CATEGORIES[cat]['emoji']} {CATEGORIES[cat]['name']}", value=cat)
-            for cat in CATEGORIES if current.lower() in cat.lower()
+            for cat in CATEGORY_ORDER if current.lower() in cat.lower()
         ][:10]
         return choices
 
-    logger.info("Модуль помощи загружен")
+    logger.info("Модуль помощи загружен (без кнопок)")
