@@ -1,166 +1,216 @@
 """
-Модуль копирования структуры сервера
-Команда: clone <ID сервера> — копирует категории, каналы, роли с другого сервера (где состоит бот)
+Модуль копирования структуры сервера через шаблон (discord.new)
+Команда: clone <ссылка шаблона или код> — копирует категории, каналы, роли в текущий сервер
+Боту не нужно состоять на сервере-источнике: структура берётся из шаблона.
 """
 
 import asyncio
 import logging
+import re
 
+import aiohttp
 import discord
 from discord.ext import commands
+from discord import app_commands
 
 logger = logging.getLogger('discord_bot.serverclone')
+
+BASE = 'https://discord.com/api'
+
+
+def _parse_template_code(value):
+    """Из ссылки (discord.new/XXX, discord.com/templates/XXX) или кода — вытаскиваем код"""
+    value = (value or '').strip().strip('<>')
+    m = re.search(r'(?:discord\.(?:com|new|gg)/(?:templates/)?)([A-Za-z0-9]+)', value)
+    if m:
+        return m.group(1)
+    m = re.search(r'^([A-Za-z0-9]{6,})$', value)
+    if m:
+        return m.group(1)
+    return None
 
 
 def setup_serverclone(bot):
     """Настройка команды клонирования сервера"""
 
-    @bot.hybrid_command(name="clone", description="Скопировать структуру сервера (категории, каналы, роли)")
+    @bot.hybrid_command(name="clone", description="Скопировать структуру сервера по шаблону discord.new (категории, каналы, роли)")
+    @app_commands.describe(template="Ссылка шаблона (discord.new/XXX) или код шаблона")
     @commands.has_permissions(administrator=True)
-    async def clone_cmd(ctx: commands.Context, server_id: int):
-        """Копирование структуры сервера по ID"""
+    async def clone_cmd(ctx: commands.Context, *, template: str):
+        """Копирование структуры сервера по шаблону"""
+        code = _parse_template_code(template)
+        if not code:
+            await ctx.send(
+                "❌ Не распознан шаблон. Используй ссылку вида `discord.new/XXXX` или код шаблона.\n"
+                "Как создать шаблон: сервер → Настройки сервера → Шаблоны сервера → Сохранить шаблон.",
+                ephemeral=True
+            )
+            return
+
+        await ctx.defer()
+        target = ctx.guild
+
+        # 1. Получаем структуру шаблона
         try:
-            source = bot.get_guild(server_id)
-            if source is None:
-                await ctx.send(f"❌ Сервер с ID **{server_id}** не найден. Бот должен быть участником этого сервера.", ephemeral=True)
-                return
-            if source.id == ctx.guild.id:
-                await ctx.send("❌ Нельзя копировать сервер сам в себя", ephemeral=True)
-                return
-
-            await ctx.defer()
-
-            target = ctx.guild
-            embed = discord.Embed(
-                title="📋 Копирование сервера",
-                description=f"Источник: **{source.name}**\nЦель: **{target.name}**",
-                color=discord.Color.orange()
-            )
-            msg = await ctx.send(embed=embed)
-
-            stats = {"roles": 0, "categories": 0, "channels": 0}
-
-            # 1. Роли (кроме @everyone и роли бота)
-            source_roles = sorted(
-                [r for r in source.roles if r.name != '@everyone' and not r.is_bot_managed() and not r.is_premium_subscriber()],
-                key=lambda r: r.position, reverse=True
-            )
-            existing_names = {r.name for r in target.roles}
-            created_roles = {}
-            for role in source_roles:
-                if role.name in existing_names:
-                    created_roles[role.id] = discord.utils.get(target.roles, name=role.name)
-                    continue
-                try:
-                    new_role = await target.create_role(
-                        name=role.name,
-                        permissions=role.permissions,
-                        colour=role.colour,
-                        hoist=role.hoist,
-                        mentionable=role.mentionable,
-                        reason=f"Копирование с сервера {source.name} ({ctx.author})"
-                    )
-                    created_roles[role.id] = new_role
-                    stats["roles"] += 1
-                    await asyncio.sleep(0.3)
-                except Exception as e:
-                    logger.error(f'Ошибка копирования роли {role.name}: {e}')
-
-            await msg.edit(embed=discord.Embed(
-                title="📋 Копирование сервера",
-                description=f"Источник: **{source.name}**\nЦель: **{target.name}**\n\n"
-                            f"✅ Роли: **{stats['roles']}** создано\n🔄 Создаю каналы...",
-                color=discord.Color.orange()
-            ))
-
-            # 2. Категории
-            source_categories = sorted(source.categories, key=lambda c: c.position)
-            created_categories = {}
-            for cat in source_categories:
-                try:
-                    new_cat = await target.create_category(
-                        name=cat.name,
-                        overwrites=_copy_overwrites(cat.overwrites, created_roles, target),
-                        position=cat.position,
-                        reason=f"Копирование с сервера {source.name} ({ctx.author})"
-                    )
-                    created_categories[cat.id] = new_cat
-                    stats["categories"] += 1
-                    await asyncio.sleep(0.2)
-                except Exception as e:
-                    logger.error(f'Ошибка копирования категории {cat.name}: {e}')
-
-            # 3. Каналы
-            source_channels = sorted(
-                source.channels,
-                key=lambda ch: (ch.category.position if ch.category else -1, ch.position)
-            )
-            for ch in source_channels:
-                try:
-                    overwrites = _copy_overwrites(ch.overwrites, created_roles, target)
-                    category = created_categories.get(ch.category_id)
-                    if isinstance(ch, discord.TextChannel):
-                        new_ch = await target.create_text_channel(
-                            name=ch.name,
-                            category=category,
-                            overwrites=overwrites,
-                            topic=ch.topic,
-                            slowmode_delay=ch.slowmode_delay,
-                            nsfw=ch.nsfw,
-                            position=ch.position,
-                            reason=f"Копирование с сервера {source.name} ({ctx.author})"
-                        )
-                    elif isinstance(ch, discord.VoiceChannel):
-                        new_ch = await target.create_voice_channel(
-                            name=ch.name,
-                            category=category,
-                            overwrites=overwrites,
-                            bitrate=min(ch.bitrate, target.bitrate_limit or ch.bitrate),
-                            user_limit=ch.user_limit,
-                            position=ch.position,
-                            reason=f"Копирование с сервера {source.name} ({ctx.author})"
-                        )
-                    elif isinstance(ch, discord.ForumChannel):
-                        new_ch = await target.create_forum(
-                            name=ch.name,
-                            category=category,
-                            overwrites=overwrites,
-                            position=ch.position,
-                            reason=f"Копирование с сервера {source.name} ({ctx.author})"
-                        )
-                    else:
-                        continue
-                    stats["channels"] += 1
-                    await asyncio.sleep(0.2)
-                except Exception as e:
-                    logger.error(f'Ошибка копирования канала {ch.name}: {e}')
-
-            await msg.edit(embed=discord.Embed(
-                title="✅ Копирование завершено",
-                description=f"Источник: **{source.name}**\nЦель: **{target.name}**\n\n"
-                            f"🎭 Роли: **{stats['roles']}**\n"
-                            f"📁 Категории: **{stats['categories']}**\n"
-                            f"📢 Каналы: **{stats['channels']}**",
-                color=discord.Color.green()
-            ))
-            logger.info(f'{ctx.author} скопировал структуру сервера {source.name} в {target.name}')
-
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f'{BASE}/guilds/templates/{code}',
+                    headers={'Authorization': f'Bot {bot.http.token}'},
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status == 404:
+                        await ctx.send("❌ Шаблон не найден (код неверный или удалён)", ephemeral=True)
+                        return
+                    if resp.status != 200:
+                        await ctx.send(f"❌ Ошибка получения шаблона: {resp.status}", ephemeral=True)
+                        return
+                    data = await resp.json()
         except Exception as e:
-            await ctx.send(f"❌ Ошибка при копировании: {e}", ephemeral=True)
-            logger.error(f'Ошибка clone: {e}')
+            await ctx.send(f"❌ Не удалось получить шаблон: {e}", ephemeral=True)
+            return
+
+        ssg = data.get('serialized_source_guild') or {}
+        template_roles = [r for r in ssg.get('roles') or [] if r.get('name') not in ('@everyone',)]
+        template_categories = ssg.get('categories') or []
+        template_channels = ssg.get('channels') or []
+
+        embed = discord.Embed(
+            title="📋 Копирование сервера из шаблона",
+            description=f"Шаблон: **{data.get('name') or 'без названия'}**\nЦель: **{target.name}**\n\n"
+                        f"🎭 Ролей: **{len(template_roles)}**\n📁 Категорий: **{len(template_categories)}**\n"
+                        f"📢 Каналов: **{len(template_channels)}**",
+            color=discord.Color.orange()
+        )
+        msg = await ctx.send(embed=embed)
+
+        stats = {"roles": 0, "categories": 0, "channels": 0, "skipped": []}
+
+        # 2. Роли
+        existing_names = {r.name for r in target.roles}
+        role_map = {}  # id роли в шаблоне -> созданная роль
+        # Сортируем по позиции (сверху вниз), чтобы проще было выставлять иерархию
+        template_roles.sort(key=lambda r: r.get('position', 0), reverse=True)
+        for role_data in template_roles:
+            name = role_data.get('name', 'Роль')
+            if name in existing_names:
+                role_map[role_data['id']] = discord.utils.get(target.roles, name=name)
+                continue
+            try:
+                perms = discord.Permissions(int(role_data.get('permissions', '0')))
+                new_role = await target.create_role(
+                    name=name,
+                    permissions=perms,
+                    colour=discord.Colour(role_data.get('color', 0)),
+                    hoist=role_data.get('hoist', False),
+                    mentionable=role_data.get('mentionable', False),
+                    reason=f"Копирование из шаблона {code} ({ctx.author})"
+                )
+                role_map[role_data['id']] = new_role
+                stats["roles"] += 1
+                await asyncio.sleep(0.2)
+            except Exception as e:
+                stats["skipped"].append(name)
+                logger.error(f'Ошибка копирования роли {name}: {e}')
+
+        await msg.edit(embed=discord.Embed(
+            title="📋 Копирование сервера из шаблона",
+            description=f"Шаблон: **{data.get('name') or 'без названия'}**\n\n"
+                        f"✅ Роли: **{stats['roles']}**\n🔄 Создаю категории...",
+            color=discord.Color.orange()
+        ))
+
+        # 3. Категории
+        cat_map = {}
+        for cat in sorted(template_categories, key=lambda c: c.get('position', 0)):
+            try:
+                overwrites = _copy_overwrites(cat.get('permission_overwrites') or [], role_map, target)
+                new_cat = await target.create_category(
+                    name=cat.get('name', 'Категория'),
+                    overwrites=overwrites,
+                    position=cat.get('position', 0),
+                    reason=f"Копирование из шаблона {code} ({ctx.author})"
+                )
+                cat_map[cat['id']] = new_cat
+                stats["categories"] += 1
+                await asyncio.sleep(0.2)
+            except Exception as e:
+                stats["skipped"].append(cat.get('name'))
+                logger.error(f'Ошибка копирования категории {cat.get("name")}: {e}')
+
+        # 4. Каналы
+        for ch in sorted(template_channels, key=lambda c: c.get('position', 0)):
+            ch_type = ch.get('type', 0)
+            try:
+                overwrites = _copy_overwrites(ch.get('permission_overwrites') or [], role_map, target)
+                category = cat_map.get(ch.get('parent_id'))
+                kwargs = dict(
+                    name=ch.get('name', 'канал'),
+                    category=category,
+                    overwrites=overwrites,
+                    position=ch.get('position', 0),
+                    reason=f"Копирование из шаблона {code} ({ctx.author})"
+                )
+                if ch_type in (0, 5):  # текст / объявления
+                    kwargs['topic'] = ch.get('topic') or None
+                    kwargs['slowmode_delay'] = ch.get('rate_limit_per_user') or 0
+                    kwargs['nsfw'] = ch.get('nsfw', False)
+                    if ch_type == 5:
+                        await target.create_news_channel(**kwargs)
+                    else:
+                        await target.create_text_channel(**kwargs)
+                elif ch_type == 2:  # голосовой
+                    kwargs['bitrate'] = min(ch.get('bitrate') or 64000, target.bitrate_limit or 96000)
+                    kwargs['user_limit'] = ch.get('user_limit', 0)
+                    await target.create_voice_channel(**kwargs)
+                elif ch_type == 13:  # форум
+                    await target.create_forum(**kwargs)
+                elif ch_type == 15:  # сцена
+                    await target.create_stage_channel(**kwargs)
+                else:
+                    continue
+                stats["channels"] += 1
+                await asyncio.sleep(0.2)
+            except Exception as e:
+                stats["skipped"].append(ch.get('name'))
+                logger.error(f'Ошибка копирования канала {ch.get("name")}: {e}')
+
+        # 5. Выставляем позиции ролей (иерархия как в источнике)
+        try:
+            ordered = sorted(template_roles, key=lambda r: r.get('position', 0), reverse=True)
+            positions = {role_map[r['id']]: pos for pos, r in enumerate(ordered) if r['id'] in role_map}
+            if positions:
+                await target.edit_role_positions(positions)
+        except Exception as e:
+            logger.error(f'Ошибка выставления позиций ролей: {e}')
+
+        finish = discord.Embed(
+            title="✅ Копирование завершено",
+            description=f"Шаблон: **{data.get('name') or 'без названия'}**\nЦель: **{target.name}**\n\n"
+                        f"🎭 Роли: **{stats['roles']}**\n📁 Категории: **{stats['categories']}**\n"
+                        f"📢 Каналы: **{stats['channels']}**",
+            color=discord.Color.green()
+        )
+        if stats["skipped"]:
+            finish.add_field(name="Пропущено (нет прав/ошибки)", value=", ".join(stats["skipped"][:20]), inline=False)
+        await msg.edit(embed=finish)
+        logger.info(f'{ctx.author} скопировал шаблон {code} в {target.name}')
 
 
-def _copy_overwrites(overwrites, created_roles, target):
-    """Перенос прав доступа канала/категории (только роли, которые удалось создать/найти)"""
+def _copy_overwrites(overwrites, role_map, target):
+    """Перенос прав доступа канала/категории из шаблона"""
     result = {}
-    for target_obj, perms in overwrites.items():
-        if isinstance(target_obj, discord.Role):
-            if target_obj.id in created_roles:
-                result[created_roles[target_obj.id]] = perms
-            elif target_obj.id == target.id:
-                result[target.default_role] = perms
-        elif isinstance(target_obj, discord.Member):
-            member = target.get_member(target_obj.id)
+    for ov in overwrites:
+        if ov.get('type') == 0:  # роль
+            role = role_map.get(ov.get('id'))
+            if role is None:
+                continue
+            allow = discord.Permissions(int(ov.get('allow', '0')))
+            deny = discord.Permissions(int(ov.get('deny', '0')))
+            result[role] = discord.PermissionOverwrite.from_pair(allow=allow, deny=deny)
+        elif ov.get('type') == 1:  # участник
+            member = target.get_member(int(ov.get('id', 0)))
             if member:
-                result[member] = perms
+                allow = discord.Permissions(int(ov.get('allow', '0')))
+                deny = discord.Permissions(int(ov.get('deny', '0')))
+                result[member] = discord.PermissionOverwrite.from_pair(allow=allow, deny=deny)
     return result
