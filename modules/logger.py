@@ -364,4 +364,52 @@ def setup_logger(bot):
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
             logger.error(f'Ошибка set-log: {e}')
 
+    @bot.hybrid_command(name="log-check", description="Проверить каналы логов и отправить тестовый лог")
+    @commands.has_permissions(manage_channels=True)
+    async def log_check_cmd(ctx: commands.Context):
+        """Диагностика системы логов"""
+        try:
+            embed = discord.Embed(
+                title="🩺 Проверка системы логов",
+                color=0x9000FF,
+                timestamp=datetime.now()
+            )
+            # Проверяем, что mod_log установлен
+            mod_log = getattr(bot, 'mod_log', None)
+            embed.add_field(name="⚙️ mod_log", value="✅ установлен" if mod_log else "❌ НЕ установлен", inline=False)
+
+            # Показываем найденные каналы
+            chan = _find_channel_by_keywords(ctx.guild, BAN_CHANNEL_KEYWORDS) or _find_log_channel(ctx.guild)
+            embed.add_field(name="🔨 Баны", value=chan.mention if chan else "❌ нет канала (нужно «бан»/«логи»)", inline=False)
+            chan = _find_channel_by_keywords(ctx.guild, UNBAN_CHANNEL_KEYWORDS) or _find_log_channel(ctx.guild)
+            embed.add_field(name="⚖️ Разбаны", value=chan.mention if chan else "❌ нет канала (нужно «разбан»/«логи»)", inline=False)
+            chan = _find_channel_by_keywords(ctx.guild, KICK_CHANNEL_KEYWORDS) or _find_log_channel(ctx.guild)
+            embed.add_field(name="👢 Кики", value=chan.mention if chan else "❌ нет канала (нужно «кик»/«логи»)", inline=False)
+            chan = _find_channel_by_keywords(ctx.guild, TIMEOUT_CHANNEL_KEYWORDS) or _find_log_channel(ctx.guild)
+            embed.add_field(name="🔇 Тайм-ауты", value=chan.mention if chan else "❌ нет канала (нужно «тайм-аут»/«мут»/«логи»)", inline=False)
+
+            await ctx.send(embed=embed, ephemeral=True)
+
+            # Отправляем тестовый лог кика, чтобы проверить реальную доставку
+            if mod_log:
+                test_embed = discord.Embed(
+                    title="🧪 Тестовый лог",
+                    description=f"Проверка системы логов от {ctx.author.mention}",
+                    color=0x9000FF,
+                    timestamp=datetime.now()
+                )
+                sent = await _send_log(bot, ctx.guild, test_embed, 'kick')
+                if sent:
+                    await ctx.send("✅ Тестовый лог отправлен в канал логов.", ephemeral=True)
+                else:
+                    await ctx.send(
+                        "❌ Тестовый лог НЕ отправлен. Создай канал с названием «логи» "
+                        "или настрой через `!set-log kick #канал`.",
+                        ephemeral=True
+                    )
+            logger.info(f'{ctx.author} проверил логи')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка log-check: {e}')
+
     logger.info("Модуль логов загружен")
