@@ -211,6 +211,33 @@ async def log_mod_action(bot, guild, action_type, title, color, target, executor
         return False
 
 
+async def _resolve_user(bot, guild, user):
+    """Возвращает реального участника/пользователя по объекту из audit log.
+
+    В audit log target приходит как неразрешённый <Object id=...> —
+    пытаемся получить настоящего участника из кэша, потом через API.
+    """
+    if user is None:
+        return None
+    try:
+        uid = int(user.id)
+    except (AttributeError, TypeError, ValueError):
+        return user
+    # Из кэша гильдии (участник ещё на сервере)
+    member = guild.get_member(uid)
+    if member:
+        return member
+    # Из общего кэша бота (пользователь известен)
+    cached = bot.get_user(uid)
+    if cached:
+        return cached
+    # Через API (если пользователь ушёл или не кэширован)
+    try:
+        return await bot.fetch_user(uid)
+    except Exception:
+        return user
+
+
 async def _send_log(bot, guild, embed, action_type):
     """Отправка лога в канал для данного типа события"""
     key = _normalize_action(action_type)
@@ -258,7 +285,7 @@ def setup_logger(bot):
             if executor.bot:
                 return
 
-            target = entry.target
+            target = await _resolve_user(bot, guild, entry.target)
             action = entry.action
 
             if action == discord.AuditLogAction.ban:
