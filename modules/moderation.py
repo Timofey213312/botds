@@ -401,6 +401,33 @@ def setup_moderation(bot):
                 pass
 
             logger.info(f'{ctx.author} выдал предупреждение {member.name} (#{warn_id}): {reason}')
+
+            # Авто-бан: больше 5 предупреждений — бан на сервере
+            WARN_BAN_LIMIT = 5
+            if count > WARN_BAN_LIMIT:
+                ban_reason = f"Превышен лимит предупреждений ({count} > {WARN_BAN_LIMIT})"
+                try:
+                    await member.ban(reason=ban_reason, delete_message_days=0)
+                except Exception as e:
+                    await ctx.send(f"❌ Участник превысил лимит предупреждений, но не удалось забанить: {e}", ephemeral=True)
+                    logger.error(f'Ошибка авто-бана за превышение предупреждений: {e}')
+                    return
+                ban_embed = discord.Embed(
+                    title=f"🔨 Участник забанен (лимит предупреждений)",
+                    color=discord.Color.dark_red(),
+                    timestamp=datetime.now()
+                )
+                ban_embed.add_field(name="Участник", value=f"{member.mention} ({member.name})", inline=True)
+                ban_embed.add_field(name="Модератор", value=ctx.author.mention, inline=True)
+                ban_embed.add_field(name="Причина", value=ban_reason, inline=False)
+                ban_embed.add_field(name="Всего предупреждений", value=str(count), inline=True)
+                await ctx.send(embed=ban_embed)
+                try:
+                    await member.send(f"🔨 Вы были забанены на сервере **{ctx.guild.name}** за превышение лимита предупреждений ({count} из {WARN_BAN_LIMIT}).")
+                except:
+                    pass
+                logger.info(f'Авто-бан {member.name} за превышение лимита предупреждений ({count})')
+
         except Exception as e:
             await ctx.send(f"❌ Ошибка при выдаче предупреждения: {e}", ephemeral=True)
             logger.error(f'Ошибка warn: {e}')
