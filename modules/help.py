@@ -38,7 +38,7 @@ CATEGORIES = {
         "emoji": "🔧",
         "color": discord.Color.blue(),
         "commands": ["serverinfo", "userinfo", "ping", "avatar", "calc", "remind",
-                     "uptime", "poll", "translate", "quote", "fact", "stats"]
+                     "uptime", "poll", "translate", "quote", "fact", "stats", "clone"]
     }
 }
 
