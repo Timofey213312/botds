@@ -105,25 +105,22 @@ def _build_category_embed(bot, cat_key):
 
 
 class HelpView(discord.ui.View):
-    """Кнопочная навигация по помощи"""
+    """Постоянная кнопочная навигация по помощи (persistent)"""
 
-    def __init__(self, bot, timeout=120):
-        super().__init__(timeout=timeout)
+    def __init__(self, bot=None):
+        super().__init__(timeout=None)
         self.bot = bot
-        self.current = "main"
-        self._add_buttons()
+        self._add_all_buttons()
 
-    def _add_buttons(self):
-        self.clear_items()
-        if self.current == "main":
-            for cat_key in CATEGORIES:
-                self.add_item(CategoryButton(cat_key, self.bot))
-            self.add_item(CloseButton())
-        else:
-            self.add_item(BackButton(self.bot))
-            for cat_key in CATEGORIES:
-                self.add_item(CategoryButton(cat_key, self.bot))
-            self.add_item(CloseButton())
+    def _add_all_buttons(self):
+        # Строка 0-2: категории
+        row = 0
+        for i, cat_key in enumerate(CATEGORIES):
+            cat = CATEGORIES[cat_key]
+            self.add_item(CategoryButton(cat_key, cat["name"], cat["emoji"], row=i // 3))
+        # Строка 3: назад + закрыть
+        self.add_item(BackButton(row=3))
+        self.add_item(CloseButton(row=3))
 
     async def show(self, interaction, cat_key=None):
         self.current = cat_key or "main"
@@ -131,18 +128,19 @@ class HelpView(discord.ui.View):
             embed = _build_main_embed(self.bot)
         else:
             embed = _build_category_embed(self.bot, self.current)
-        self._add_buttons()
-        await interaction.response.edit_message(embed=embed, view=self)
+        # Панель persistent: не меняем кнопки, только embed
+        await interaction.response.edit_message(embed=embed)
 
 
 class CategoryButton(discord.ui.Button):
     """Кнопка выбора категории"""
 
-    def __init__(self, cat_key, bot):
-        cat = CATEGORIES[cat_key]
-        super().__init__(label=cat["name"], style=discord.ButtonStyle.secondary, emoji=cat["emoji"])
+    def __init__(self, cat_key, name, emoji, row=0):
+        super().__init__(
+            label=name, style=discord.ButtonStyle.secondary, emoji=emoji,
+            custom_id=f"help_cat_{cat_key}", row=row,
+        )
         self.cat_key = cat_key
-        self.bot = bot
 
     async def callback(self, interaction: discord.Interaction):
         if not isinstance(self.view, HelpView):
@@ -153,9 +151,11 @@ class CategoryButton(discord.ui.Button):
 class BackButton(discord.ui.Button):
     """Кнопка возврата к общему списку"""
 
-    def __init__(self, bot):
-        super().__init__(label="🏠 Главная", style=discord.ButtonStyle.primary)
-        self.bot = bot
+    def __init__(self, row=3):
+        super().__init__(
+            label="🏠 Главная", style=discord.ButtonStyle.primary,
+            custom_id="help_back", row=row,
+        )
 
     async def callback(self, interaction: discord.Interaction):
         if not isinstance(self.view, HelpView):
@@ -166,8 +166,11 @@ class BackButton(discord.ui.Button):
 class CloseButton(discord.ui.Button):
     """Кнопка закрытия помощи"""
 
-    def __init__(self):
-        super().__init__(label="❌ Закрыть", style=discord.ButtonStyle.danger)
+    def __init__(self, row=3):
+        super().__init__(
+            label="❌ Закрыть", style=discord.ButtonStyle.danger,
+            custom_id="help_close", row=row,
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -176,6 +179,10 @@ class CloseButton(discord.ui.Button):
 
 def setup_help(bot):
     """Настройка команды помощи"""
+
+    # Регистрируем постоянную панель помощи (работает после рестарта)
+    bot.help_view = HelpView(bot)
+    bot.add_view(bot.help_view)
 
     @bot.hybrid_command(name="help", description="Показать все команды бота")
     @app_commands.describe(category="Категория команд (moderation, music, economy, games, utilities, tickets, other)")
@@ -186,8 +193,7 @@ def setup_help(bot):
                 embed = _build_category_embed(bot, category.lower())
             else:
                 embed = _build_main_embed(bot)
-            view = HelpView(bot)
-            await ctx.send(embed=embed, view=view)
+            await ctx.send(embed=embed, view=bot.help_view)
             logger.info(f'{ctx.author} использовал команду help')
         except Exception as e:
             await ctx.send(f"❌ Ошибка при показе помощи: {e}", ephemeral=True)
