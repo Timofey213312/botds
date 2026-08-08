@@ -79,12 +79,21 @@ def _format_duration(after, before=None):
 
 def _log_embed(title, color, action, target, executor, reason, guild):
     """Сборка embed лога"""
+    # Человеческое название действия
+    action_labels = {
+        'ban': 'Бан',
+        'unban': 'Разбан',
+        'kick': 'Кик',
+        'timeout': 'Тайм-аут',
+        'untimeout': 'Снят тайм-аут',
+    }
+    display_action = action_labels.get(action, action)
     embed = discord.Embed(
         title=title,
         color=color,
         timestamp=datetime.now()
     )
-    embed.add_field(name="🎯 Действие", value=action, inline=True)
+    embed.add_field(name="🎯 Действие", value=display_action, inline=True)
     embed.add_field(name="👤 Пользователь", value=f"{target.mention}\n({target.name} · ID: `{target.id}`)", inline=True)
     embed.add_field(name="👮 Исполнитель", value=f"{executor.mention}\n({executor.name} · ID: `{executor.id}`)", inline=True)
     if reason and reason != "Не указана":
@@ -106,7 +115,7 @@ async def log_mod_action(bot, guild, action_type, title, color, target, executor
             reason=reason,
             guild=guild,
         )
-        return await _send_log(bot, guild, embed, action_type.lower())
+        return await _send_log(bot, guild, embed, action_type)
     except Exception as e:
         logger.error(f'Ошибка log_mod_action: {e}')
         return False
@@ -114,6 +123,16 @@ async def log_mod_action(bot, guild, action_type, title, color, target, executor
 
 async def _send_log(bot, guild, embed, action_type):
     """Отправка лога в соответствующий канал"""
+    # Нормализация названия типа (кириллица → английский ключ)
+    norm_map = {
+        'кик': 'kick', 'кики': 'kick',
+        'бан': 'ban', 'баны': 'ban', 'забанен': 'ban',
+        'разбан': 'unban', 'снят бан': 'unban',
+        'мут': 'timeout', 'тайм-аут': 'timeout', 'таймаут': 'timeout',
+        'снят тайм-аут': 'untimeout', 'снятие тайм-аута': 'untimeout',
+    }
+    action_type = norm_map.get(action_type, action_type)
+
     # Специфичный канал для типа события
     type_keywords = {
         'ban': BAN_CHANNEL_KEYWORDS,
@@ -130,6 +149,8 @@ async def _send_log(bot, guild, embed, action_type):
     if channel is None:
         channel = _find_log_channel(guild)
     if not channel:
+        logger.warning(f'Канал логов для действия «{action_type}» не найден на {guild.name}. '
+                       f'Создай канал с названием «логи» или настрой !set-log')
         return False
     try:
         await channel.send(embed=embed)

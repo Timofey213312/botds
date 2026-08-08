@@ -84,10 +84,9 @@ def setup_moderation(bot):
             mod_log = getattr(bot, 'mod_log', None)
             if mod_log:
                 try:
-                    await mod_log(bot, ctx.guild, "Кик", "👢 Участник кикнут", 0xE67E22, member, ctx.author, reason)
+                    await mod_log(bot, ctx.guild, "kick", "👢 Участник кикнут", 0xE67E22, member, ctx.author, reason)
                 except Exception as e:
-                    logger.error(f'Ошибка лога кика: {e}')
-            
+                    logger.error(f'Ошибка лога кика: {e}')            
             # Уведомляем участника
             try:
                 await member.send(f"Вы были кикнуты с сервера **{ctx.guild.name}**\n**Причина:** {reason}")
@@ -131,7 +130,7 @@ def setup_moderation(bot):
             mod_log = getattr(bot, 'mod_log', None)
             if mod_log:
                 try:
-                    await mod_log(bot, ctx.guild, "Бан", "🔨 Участник забанен", 0xE74C3C, member, ctx.author, reason)
+                    await mod_log(bot, ctx.guild, "ban", "🔨 Участник забанен", 0xE74C3C, member, ctx.author, reason)
                 except Exception as e:
                     logger.error(f'Ошибка лога бана: {e}')
             
@@ -197,7 +196,7 @@ def setup_moderation(bot):
             mod_log = getattr(bot, 'mod_log', None)
             if mod_log:
                 try:
-                    await mod_log(bot, ctx.guild, f"Мут ({minutes} мин)", "🔇 Участник замучен", 0x9B59B6, member, ctx.author, reason)
+                    await mod_log(bot, ctx.guild, f"timeout ({minutes} мин)", "🔇 Участник замучен", 0x9B59B6, member, ctx.author, reason)
                 except Exception as e:
                     logger.error(f'Ошибка лога мута: {e}')
             
@@ -262,7 +261,7 @@ def setup_moderation(bot):
             mod_log = getattr(bot, 'mod_log', None)
             if mod_log:
                 try:
-                    await mod_log(bot, ctx.guild, f"Тайм-аут ({minutes} мин)", "🔇 Участник в тайм-ауте", 0x9B59B6, member, ctx.author, reason)
+                    await mod_log(bot, ctx.guild, f"timeout ({minutes} мин)", "🔇 Участник в тайм-ауте", 0x9B59B6, member, ctx.author, reason)
                 except Exception as e:
                     logger.error(f'Ошибка лога таймаута: {e}')
             
@@ -298,7 +297,7 @@ def setup_moderation(bot):
             mod_log = getattr(bot, 'mod_log', None)
             if mod_log:
                 try:
-                    await mod_log(bot, ctx.guild, "Снят тайм-аут", "🔓 Тайм-аут снят", 0x1ABC9C, member, ctx.author, reason)
+                    await mod_log(bot, ctx.guild, "untimeout", "🔓 Тайм-аут снят", 0x1ABC9C, member, ctx.author, reason)
                 except Exception as e:
                     logger.error(f'Ошибка лога снятия таймаута: {e}')
             
@@ -397,7 +396,7 @@ def setup_moderation(bot):
             mod_log = getattr(bot, 'mod_log', None)
             if mod_log:
                 try:
-                    await mod_log(bot, ctx.guild, "Разбан", "⚖️ Снят бан", 0x2ECC71, target, ctx.author, reason)
+                    await mod_log(bot, ctx.guild, "unban", "⚖️ Снят бан", 0x2ECC71, target, ctx.author, reason)
                 except Exception as e:
                     logger.error(f'Ошибка лога разбана: {e}')
         except Exception as e:
