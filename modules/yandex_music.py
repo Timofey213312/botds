@@ -28,6 +28,7 @@ USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
 
 # Ссылки на Яндекс Музыку
 _PLAYLIST_RE = re.compile(r'music\.yandex\.\w+/users/(?P<login>[^/]+)/playlists/(?P<kind>\d+)')
+_UUID_PLAYLIST_RE = re.compile(r'music\.yandex\.\w+/playlists/(?P<uuid>[0-9a-fA-F-]{20,})')
 _ALBUM_RE = re.compile(r'music\.yandex\.\w+/album/(?P<album>\d+)')
 _TRACK_RE = re.compile(r'music\.yandex\.\w+/album/(?P<album>\d+)/track/(?P<track>\d+)')
 
@@ -86,7 +87,26 @@ def _parse_track_url(url: str):
     m = _PLAYLIST_RE.search(url)
     if m:
         return 'playlist', {'login': m.group('login'), 'kind': int(m.group('kind'))}
+    m = _UUID_PLAYLIST_RE.search(url)
+    if m:
+        return 'playlist_uuid', {'uuid': m.group('uuid')}
     return None, None
+
+
+async def _resolve_uuid_playlist(session, uuid, token):
+    """Новый формат ссылок (music.yandex.ru/playlists/{uuid}): по HTML страницы
+    определяем uid владельца и номер плейлиста (kind)."""
+    page_url = f'https://music.yandex.ru/playlists/{uuid}'
+    async with session.get(page_url, headers=_headers(token), timeout=aiohttp.ClientTimeout(total=20)) as resp:
+        if resp.status != 200:
+            raise YandexError(f'Яндекс Музыка вернула ошибку {resp.status} при открытии плейлиста')
+        text = await resp.text()
+    m = re.search(r'"uid"\s*:\s*(\d+).*?"kind"\s*:\s*(\d+)', text)
+    if not m:
+        m = re.search(r'"kind"\s*:\s*(\d+).*?"uid"\s*:\s*(\d+)', text)
+    if not m:
+        raise YandexError('Не удалось определить владельца плейлиста (новый формат ссылки)')
+    return m.group(1), int(m.group(2))
 
 
 async def _fetch_track_info(session, track_id, album_id, token):
@@ -166,6 +186,13 @@ async def _playlist_tracks(session, url, token):
     kind_type, params = _parse_track_url(url)
     if kind_type == 'playlist':
         data = await _search_playlist_by_login(session, params['login'], params['kind'], token)
+        if not data:
+            return None, None
+        title = data.get('title') or 'Плейлист'
+        tracks = data.get('tracks') or []
+    elif kind_type == 'playlist_uuid':
+        uid, kind = await _resolve_uuid_playlist(session, params['uuid'], token)
+        data = await _get_json(session, f'{BASE_URL}/users/{uid}/playlists/{kind}', token=token)
         if not data:
             return None, None
         title = data.get('title') or 'Плейлист'
