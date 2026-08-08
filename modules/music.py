@@ -392,6 +392,10 @@ async def search_similar_tracks(track, limit=5):
 def setup_music(bot):
     """Настройка команд музыки"""
 
+    from modules.yandex_music import (is_yandex_url, fetch_yandex_playlist,
+                                      fetch_yandex_single_track, get_token,
+                                      make_session, _parse_track_url)
+
     music_player = MusicPlayer(bot)
 
     async def play_track(guild_id, vc, track, channel=None):
@@ -975,6 +979,51 @@ def setup_music(bot):
 
             await ctx.defer()
 
+            # Ссылка на Яндекс Музыку (плейлист/альбом/трек)
+            if is_yandex_url(query):
+                ym_token = get_token()
+                ym_session = await make_session()
+                try:
+                    ym_type, _ = _parse_track_url(query)
+                    if ym_type == 'track':
+                        tr = await fetch_yandex_single_track(ym_session, query, ym_token)
+                        if not tr:
+                            await ctx.send("❌ Не удалось загрузить трек из Яндекс Музыки", ephemeral=True)
+                            return
+                        music_player.add_to_queue(ctx.guild.id, tr)
+                        if not (vc.is_playing() or vc.is_paused()):
+                            await play_track(ctx.guild.id, vc, tr, ctx.channel)
+                            embed = await now_playing_embed(tr)
+                            await ctx.send(embed=embed)
+                        else:
+                            await ctx.send(f"✅ Добавлено в очередь: **{tr['title']}**")
+                        await update_panel(ctx.guild.id)
+                        logger.info(f'{ctx.author} воспроизвёл трек Яндекс: {tr["title"]}')
+                        return
+
+                    note = "" if ym_token else "\n⚠️ Без токена играют 30-секундные превью. Добавь `YANDEX_MUSIC_TOKEN` (подписка Плюс) для полных треков."
+                    await ctx.send(f"📂 Загружаю плейлист Яндекс Музыки...{note}")
+                    title, ym_tracks = await fetch_yandex_playlist(ym_session, query, ym_token, limit=50)
+                    if not ym_tracks:
+                        await ctx.send("❌ Плейлист не найден или пуст", ephemeral=True)
+                        return
+
+                    for tr in ym_tracks:
+                        music_player.add_to_queue(ctx.guild.id, tr)
+
+                    if not (vc.is_playing() or vc.is_paused()):
+                        await play_track(ctx.guild.id, vc, ym_tracks[0], ctx.channel)
+                        embed = await now_playing_embed(ym_tracks[0])
+                        await ctx.send(embed=embed)
+                    else:
+                        await ctx.send(f"📂 Добавлено **{len(ym_tracks)}** треков в очередь из плейлиста **{title}**")
+
+                    await update_panel(ctx.guild.id)
+                    logger.info(f'{ctx.author} загрузил плейлист Яндекс: {title} ({len(ym_tracks)} треков)')
+                    return
+                finally:
+                    await ym_session.close()
+
             # Определяем, ссылка ли это на плейлист
             if re.match(r'https?://', query) and ('list=' in query or 'playlist' in query.lower() or 'set/' in query.lower()):
                 title, raw_tracks = await search_playlist(query)
@@ -1044,8 +1093,8 @@ def setup_music(bot):
             await ctx.send(f"❌ Ошибка при воспроизведении: {e}", ephemeral=True)
             logger.error(f'Ошибка play: {e}')
 
-    @bot.hybrid_command(name="playlist", description="Добавить плейлист в очередь")
-    @app_commands.describe(url="Ссылка на плейлист YouTube")
+    @bot.hybrid_command(name="playlist", description="Добавить плейлист в очередь (YouTube, Яндекс Музыка)")
+    @app_commands.describe(url="Ссылка на плейлист (YouTube или Яндекс Музыка)")
     async def playlist_cmd(ctx: commands.Context, *, url: str):
         """Добавление плейлиста в очередь"""
         try:
@@ -1062,6 +1111,34 @@ def setup_music(bot):
                     return
 
             await ctx.defer()
+
+            # Ссылка на Яндекс Музыку
+            if is_yandex_url(url):
+                ym_token = get_token()
+                ym_session = await make_session()
+                try:
+                    note = "" if ym_token else "\n⚠️ Без токена играют 30-секундные превью. Добавь `YANDEX_MUSIC_TOKEN` (подписка Плюс) для полных треков."
+                    await ctx.send(f"📂 Загружаю плейлист Яндекс Музыки...{note}")
+                    title, ym_tracks = await fetch_yandex_playlist(ym_session, url, ym_token, limit=50)
+                    if not ym_tracks:
+                        await ctx.send("❌ Плейлист не найден или пуст", ephemeral=True)
+                        return
+
+                    for tr in ym_tracks:
+                        music_player.add_to_queue(ctx.guild.id, tr)
+
+                    if not (vc.is_playing() or vc.is_paused()):
+                        await play_track(ctx.guild.id, vc, ym_tracks[0], ctx.channel)
+                        embed = await now_playing_embed(ym_tracks[0])
+                        await ctx.send(embed=embed)
+                    else:
+                        await ctx.send(f"📂 Добавлено **{len(ym_tracks)}** треков в очередь из плейлиста **{title}**")
+
+                    await update_panel(ctx.guild.id)
+                    logger.info(f'{ctx.author} загрузил плейлист Яндекс: {title} ({len(ym_tracks)} треков)')
+                    return
+                finally:
+                    await ym_session.close()
 
             title, raw_tracks = await search_playlist(url)
             if not raw_tracks:
