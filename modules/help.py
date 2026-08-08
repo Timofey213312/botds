@@ -123,11 +123,13 @@ class HelpView(discord.ui.View):
         self.add_item(CloseButton(row=3))
 
     async def show(self, interaction, cat_key=None):
+        # Бота берём из самого interaction — так надёжнее, чем из view
+        bot = self.bot or interaction.client
         self.current = cat_key or "main"
         if self.current == "main":
-            embed = _build_main_embed(self.bot)
+            embed = _build_main_embed(bot)
         else:
-            embed = _build_category_embed(self.bot, self.current)
+            embed = _build_category_embed(bot, self.current)
         # Панель persistent: не меняем кнопки, только embed
         await interaction.response.edit_message(embed=embed)
 
