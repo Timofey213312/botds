@@ -18,6 +18,7 @@ LOG_CHANNEL_KEYWORDS = ('логи', 'logs', 'мод-логи', 'audit', 'лог�
 BAN_CHANNEL_KEYWORDS = ('бан', 'ban', 'баны')
 UNBAN_CHANNEL_KEYWORDS = ('разбан', 'unban', 'анбан')
 KICK_CHANNEL_KEYWORDS = ('кик', 'kick', 'кики')
+TIMEOUT_CHANNEL_KEYWORDS = ('тайм-аут', 'таймаут', 'timeout', 'мут', 'mute', 'муты')
 # Цвета событий
 KICK_COLOR = 0xE67E22
 BAN_COLOR = 0xE74C3C
@@ -46,6 +47,36 @@ def _find_log_channel(guild):
     return None
 
 
+def _format_duration(after, before=None):
+    """Формат длительности тайм-аута (после - до)"""
+    try:
+        end = after
+        start = before
+        if start is None:
+            # Тайм-аут выдан "сейчас"
+            delta = end - datetime.now()
+        else:
+            delta = end - start
+        seconds = int(delta.total_seconds())
+        if seconds <= 0:
+            return "неизвестно"
+        days, rem = divmod(seconds, 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, seconds = divmod(rem, 60)
+        parts = []
+        if days:
+            parts.append(f"{days} дн")
+        if hours:
+            parts.append(f"{hours} ч")
+        if minutes:
+            parts.append(f"{minutes} мин")
+        if seconds:
+            parts.append(f"{seconds} сек")
+        return " ".join(parts) if parts else "неизвестно"
+    except Exception:
+        return "неизвестно"
+
+
 def _log_embed(title, color, action, target, executor, reason, guild):
     """Сборка embed лога"""
     embed = discord.Embed(
@@ -69,6 +100,8 @@ async def _send_log(bot, guild, embed, action_type):
         'ban': BAN_CHANNEL_KEYWORDS,
         'unban': UNBAN_CHANNEL_KEYWORDS,
         'kick': KICK_CHANNEL_KEYWORDS,
+        'timeout': TIMEOUT_CHANNEL_KEYWORDS,
+        'untimeout': TIMEOUT_CHANNEL_KEYWORDS,
     }.get(action_type)
 
     channel = None
@@ -121,6 +154,53 @@ def setup_logger(bot):
                 )
                 await _send_log(bot, guild, embed, 'ban')
                 logger.info(f'ЛОГ: бан {target} от {executor}')
+
+            elif entry.action == discord.AuditLogAction.member_update:
+                # Проверяем, менялся ли тайм-аут (timeout)
+                before_timeout = getattr(entry.before, 'timed_out_until', None)
+                after_timeout = getattr(entry.after, 'timed_out_until', None)
+
+                if before_timeout is None and after_timeout is not None:
+                    # Тайм-аут выдан
+                    duration = _format_duration(after_timeout, None)
+                    embed = _log_embed(
+                        title="🔇 Участник в тайм-ауте",
+                        color=0x9B59B6,
+                        action=f"Тайм-аут ({duration})",
+                        target=target,
+                        executor=executor,
+                        reason=entry.reason,
+                        guild=guild,
+                    )
+                    await _send_log(bot, guild, embed, 'timeout')
+                    logger.info(f'ЛОГ: тайм-аут {target} от {executor} ({duration})')
+                elif before_timeout is not None and after_timeout is None:
+                    # Тайм-аут снят
+                    embed = _log_embed(
+                        title="🔓 Тайм-аут снят",
+                        color=0x1ABC9C,
+                        action="Снят тайм-аут",
+                        target=target,
+                        executor=executor,
+                        reason=entry.reason,
+                        guild=guild,
+                    )
+                    await _send_log(bot, guild, embed, 'untimeout')
+                    logger.info(f'ЛОГ: снят тайм-аут {target} от {executor}')
+                elif before_timeout is not None and after_timeout is not None and before_timeout != after_timeout:
+                    # Тайм-аут продлён/изменён
+                    duration = _format_duration(after_timeout, before_timeout)
+                    embed = _log_embed(
+                        title="🔇 Тайм-аут изменён",
+                        color=0x9B59B6,
+                        action=f"Тайм-аут изменён ({duration})",
+                        target=target,
+                        executor=executor,
+                        reason=entry.reason,
+                        guild=guild,
+                    )
+                    await _send_log(bot, guild, embed, 'timeout')
+                    logger.info(f'ЛОГ: изменён тайм-аут {target} от {executor} ({duration})')
 
             elif entry.action == discord.AuditLogAction.unban:
                 embed = _log_embed(
@@ -182,7 +262,7 @@ def setup_logger(bot):
             logger.error(f'Ошибка резервного лога разбана: {e}')
 
     @bot.hybrid_command(name="set-log", description="Указать каналы для логов модерации")
-    @app_commands.describe(type="Тип логов: ban, unban, kick")
+    @app_commands.describe(type="Тип логов: ban, unban, kick, timeout")
     @commands.has_permissions(manage_channels=True)
     async def set_log_cmd(ctx: commands.Context, type: str = None, channel: discord.TextChannel = None):
         """Настройка каналов логов. Каналы подбираются по названию автоматически,
@@ -201,7 +281,9 @@ def setup_logger(bot):
                 embed.add_field(name="⚖️ Разбаны", value=chan.mention if chan else "❌ не найден (нужно «разбан»/«логи»)", inline=False)
                 chan = _find_channel_by_keywords(ctx.guild, KICK_CHANNEL_KEYWORDS) or _find_log_channel(ctx.guild)
                 embed.add_field(name="👢 Кики", value=chan.mention if chan else "❌ не найден (нужно «кик»/«логи»)", inline=False)
-                embed.set_footer(text="Создай каналы #баны, #разбаны, #кики — или общий #логи")
+                chan = _find_channel_by_keywords(ctx.guild, TIMEOUT_CHANNEL_KEYWORDS) or _find_log_channel(ctx.guild)
+                embed.add_field(name="🔇 Тайм-ауты", value=chan.mention if chan else "❌ не найден (нужно «тайм-аут»/«мут»/«логи»)", inline=False)
+                embed.set_footer(text="Создай каналы #баны, #разбаны, #кики, #тайм-ауты — или общий #логи")
                 await ctx.send(embed=embed, ephemeral=True)
                 return
 
@@ -213,9 +295,14 @@ def setup_logger(bot):
                 'разбан': ('разбаны', UNBAN_CHANNEL_KEYWORDS),
                 'kick': ('кики', KICK_CHANNEL_KEYWORDS),
                 'кик': ('кики', KICK_CHANNEL_KEYWORDS),
+                'timeout': ('тайм-ауты', TIMEOUT_CHANNEL_KEYWORDS),
+                'таймаут': ('тайм-ауты', TIMEOUT_CHANNEL_KEYWORDS),
+                'тайм-аут': ('тайм-ауты', TIMEOUT_CHANNEL_KEYWORDS),
+                'mute': ('тайм-ауты', TIMEOUT_CHANNEL_KEYWORDS),
+                'мут': ('тайм-ауты', TIMEOUT_CHANNEL_KEYWORDS),
             }
             if type_lower not in type_map:
-                await ctx.send("❌ Тип должен быть: `ban`, `unban` или `kick`", ephemeral=True)
+                await ctx.send("❌ Тип должен быть: `ban`, `unban`, `kick` или `timeout`", ephemeral=True)
                 return
 
             label, keywords = type_map[type_lower]
