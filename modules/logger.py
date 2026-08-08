@@ -93,6 +93,25 @@ def _log_embed(title, color, action, target, executor, reason, guild):
     return embed
 
 
+async def log_mod_action(bot, guild, action_type, title, color, target, executor, reason="Не указана"):
+    """Публичная отправка лога модерации (вызывается из команд модерации,
+    чтобы лог попал в канал даже если действие сделано командой бота)."""
+    try:
+        embed = _log_embed(
+            title=title,
+            color=color,
+            action=action_type,
+            target=target,
+            executor=executor,
+            reason=reason,
+            guild=guild,
+        )
+        return await _send_log(bot, guild, embed, action_type.lower())
+    except Exception as e:
+        logger.error(f'Ошибка log_mod_action: {e}')
+        return False
+
+
 async def _send_log(bot, guild, embed, action_type):
     """Отправка лога в соответствующий канал"""
     # Специфичный канал для типа события
@@ -125,6 +144,9 @@ async def _send_log(bot, guild, embed, action_type):
 
 def setup_logger(bot):
     """Настройка системы логов"""
+
+    # Доступ командам модерации для отправки логов в канал
+    bot.mod_log = log_mod_action
 
     # Логирование банов и разбанов через audit log (надёжно определяет исполнителя)
     @bot.listen('on_audit_log_entry_create')
