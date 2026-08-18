@@ -39,11 +39,60 @@ CATEGORIES = {
         "color": discord.Color.blue(),
         "commands": ["serverinfo", "userinfo", "ping", "avatar", "calc", "remind",
                      "uptime", "poll", "translate", "quote", "fact", "stats"]
+    },
+    "fun": {
+        "name": "Развлечения",
+        "description": "Игры, рандом, реакции",
+        "emoji": "🎮",
+        "color": discord.Color.purple(),
+        "commands": ["8ball", "coin", "dice", "rps", "meme", "joke", "roast", "compliment",
+                     "ship", "rate", "fortune", "emojify", "reverse", "uwu", "mock",
+                     "slap", "hug", "kiss", "punch", "pat", "cuddle", "highfive", "bite",
+                     "random", "choose", "spinner", "iq", "gay", "simp", "topics", "wouldyou",
+                     "ascii", "roll", "flip", "zalgo", "dadjoke", "trump", "biden", "cowsay"]
+    },
+    "economy": {
+        "name": "Экономика",
+        "description": "Баланс, работа, игры на деньги",
+        "emoji": "💰",
+        "color": discord.Color.gold(),
+        "commands": ["balance", "daily", "work", "gamble", "slots", "give", "rob",
+                     "leaderboard", "shop", "buy", "inventory", "fish", "level"]
+    },
+    "text": {
+        "name": "Текст",
+        "description": "Преобразование текста, кодировки",
+        "emoji": "✏️",
+        "color": discord.Color.teal(),
+        "commands": ["upper", "lower", "capitalize", "title", "len", "words",
+                     "binary", "unbinary", "hex", "unhex", "base64", "unbase64",
+                     "md5", "sha1", "sha256", "password", "snake", "kebab", "camel",
+                     "leet", "bold", "italic", "underline", "spoiler", "strike", "box"]
+    },
+    "math": {
+        "name": "Математика",
+        "description": "Вычисления, конвертация",
+        "emoji": "🧮",
+        "color": discord.Color.dark_blue(),
+        "commands": ["add", "sub", "mul", "div", "pow", "sqrt", "cbrt", "sin", "cos", "tan",
+                     "log", "ln", "exp", "abs", "round", "floor", "ceil", "factorial", "fib",
+                     "prime", "divisors", "gcd", "lcm", "percent", "convert", "temp",
+                     "average", "minmax", "area", "distance"]
+    },
+    "info": {
+        "name": "Информация",
+        "description": "Информация о сервере и участниках",
+        "emoji": "ℹ️",
+        "color": discord.Color.dark_teal(),
+        "commands": ["botinfo", "servericon", "serverbanner", "channelinfo", "roleinfo",
+                     "roles", "emojis", "boosters", "invites", "created", "rolesof",
+                     "permissions", "badges", "guildinfo", "membercount", "whois",
+                     "banner", "activity", "status", "joined", "dictionary"]
     }
 }
 
 # Порядок отображения команд
-CATEGORY_ORDER = ["moderation", "music", "utilities"]
+CATEGORY_ORDER = ["moderation", "music", "utilities", "fun", "economy", "text", "math", "info"]
 
 
 def _get_commands(bot, cat_key=None):

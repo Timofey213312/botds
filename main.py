@@ -228,6 +228,11 @@ from modules.autoclean import setup_autoclean
 from modules.tempvoice import setup_tempvoice
 from modules.ideas import setup_ideas
 from modules.panels import setup_panels
+from modules.fun import setup_fun
+from modules.economy import setup_economy
+from modules.text import setup_text
+from modules.math_tools import setup_math_tools
+from modules.info import setup_info
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -242,6 +247,11 @@ _setups = {
     "tempvoice": setup_tempvoice,
     "ideas": setup_ideas,
     "panels": setup_panels,
+    "fun": setup_fun,
+    "economy": setup_economy,
+    "text": setup_text,
+    "math_tools": setup_math_tools,
+    "info": setup_info,
 }
 for _name, _fn in _setups.items():
     try:
