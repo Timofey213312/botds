@@ -191,18 +191,20 @@ def setup_antispam(bot):
 
     async def _extract_images(message):
         images = []
+        img_ext = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
         for att in message.attachments:
-            if att.content_type and att.content_type.startswith("image/"):
-                if att.size <= 15 * 1024 * 1024:
-                    try:
-                        images.append(await att.read())
-                    except Exception:
-                        pass
-        for emb in message.embeds:
-            url = emb.image.url or (emb.thumbnail.url if emb.thumbnail else None)
-            if url:
+            is_img = (att.content_type and att.content_type.startswith("image/")) or \
+                      (att.filename and att.filename.lower().endswith(img_ext))
+            if is_img and att.size <= 15 * 1024 * 1024:
                 try:
-                    async with bot.session.get(url) as resp:
+                    images.append(await att.read())
+                except Exception:
+                    pass
+        for emb in message.embeds:
+            url = emb.image.url or emb.thumbnail.url or (emb.url if emb.url else None)
+            if url and str(url).lower().endswith(img_ext):
+                try:
+                    async with bot.session.get(str(url)) as resp:
                         if resp.status == 200:
                             data = await resp.read()
                             if len(data) <= 15 * 1024 * 1024:
@@ -250,58 +252,68 @@ def setup_antispam(bot):
 
     @bot.listen('on_message')
     async def antispam_listener(message):
-        if message.author == bot.user:
-            return
-        if not message.guild:
-            return
-        if not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
-            return
-
-        settings = await _get_settings(message.guild.id)
-        if not settings["enabled"]:
-            return
-
-        whitelist = []
         try:
-            whitelist = json.loads(settings["whitelist"] or "[]")
-        except Exception:
+            if message.author == bot.user:
+                return
+            if not message.guild:
+                return
+            if not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
+                return
+
+            settings = await _get_settings(message.guild.id)
+            if not settings["enabled"]:
+                return
+
             whitelist = []
-        if message.channel.id in whitelist:
-            return
-        if message.author.guild_permissions.manage_messages:
-            return
+            try:
+                whitelist = json.loads(settings["whitelist"] or "[]")
+            except Exception:
+                whitelist = []
+            if message.channel.id in whitelist:
+                return
+            # Пропускаем только тех, у кого точно есть guild_permissions (модераторы).
+            # У вебхуков/некоторых авторов этого поля может не быть — не падаем.
+            author_perms = getattr(message.author, "guild_permissions", None)
+            if author_perms is not None and author_perms.manage_messages:
+                return
 
-        text_score, text_found = _scan_text(message.content)
-        best_score = text_score
-        best_words = text_found
-        ocr_text = message.content
+            text_score, text_found = _scan_text(message.content)
+            best_score = text_score
+            best_words = text_found
+            ocr_text = message.content
 
-        images = await _extract_images(message)
-        for img_data in images:
-            ocr = await _ocr_image(img_data)
-            if ocr:
-                ocr_text = ocr
-                score, found = _scan_text(ocr)
-                if score > best_score:
-                    best_score = score
-                    best_words = found
+            images = await _extract_images(message)
+            for img_data in images:
+                ocr = await _ocr_image(img_data)
+                if ocr:
+                    ocr_text = ocr
+                    score, found = _scan_text(ocr)
+                    if score > best_score:
+                        best_score = score
+                        best_words = found
 
-        if best_score >= 3:
-            category = "казино/ставки" if any(f[0] == "казино" for f in best_words) else "наркотики"
-            extra = ""
-            can_delete = message.channel.permissions_for(message.guild.me).manage_messages
-            if not can_delete:
-                extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (нужен Manage Messages в канале)"
-            else:
-                try:
-                    await message.delete()
-                except discord.Forbidden:
-                    extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (Manage Messages запрещён ролью/иерархией)"
-                except Exception as e:
-                    extra = f"Ошибка удаления: {e}"
-            await _punish(message.guild, message.author, settings, f"Антиреклама: {category}")
-            await _log(message.guild, message.author, category, best_words, ocr_text, extra=extra)
-            logger.info(f'Антиреклама: реклама от {message.author} ({category}) | {extra or "удалено"}')
+            if best_score >= 3:
+                category = "казино/ставки" if any(f[0] == "казино" for f in best_words) else "наркотики"
+                extra = ""
+                can_delete = message.channel.permissions_for(message.guild.me).manage_messages
+                if not can_delete:
+                    extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (нужен Manage Messages в канале)"
+                else:
+                    try:
+                        await message.delete()
+                    except discord.Forbidden:
+                        extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (Manage Messages запрещён ролью/иерархией)"
+                    except Exception as e:
+                        extra = f"Ошибка удаления: {e}"
+                await _punish(message.guild, message.author, settings, f"Антиреклама: {category}")
+                await _log(message.guild, message.author, category, best_words, ocr_text, extra=extra)
+                logger.info(f'Антиреклама: реклама от {message.author} ({category}) | {extra or "удалено"}')
+        except Exception as e:
+            logger.error(f'ОШИБКА antispam_listener: {e}', exc_info=True)
+            try:
+                await _log(message.guild, message.author, "ОШИБКА МОДУЛЯ", [], str(message.content), extra=f"antispam_listener упал: {e}")
+            except Exception:
+                pass
 
     @bot.hybrid_command(name="antispam", description="Настройки антирекламы (OCR-мониторинг фото)")
     @app_commands.describe(action="Что сделать", value="Значение")
