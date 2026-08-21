@@ -170,27 +170,35 @@ class HelpView(discord.ui.View):
     def __init__(self, bot):
         super().__init__(timeout=180)
         self.bot = bot
-        options = []
-        for cat_key in CATEGORY_ORDER:
+        for idx, cat_key in enumerate(CATEGORY_ORDER):
             cat = CATEGORIES[cat_key]
-            options.append(discord.ui.Select.option(
-                label=cat['name'][:100],
-                value=cat_key,
+            row = 0 if idx < 4 else 1
+            btn = discord.ui.Button(
+                label=cat['name'][:80],
                 emoji=cat['emoji'],
-                description=cat['description'][:100]
-            ))
-        self.select_cat.options = options
+                style=discord.ButtonStyle.blurple,
+                row=row
+            )
+            btn.callback = self._make_callback(cat_key)
+            self.add_item(btn)
+        back = discord.ui.Button(
+            label="◀ Назад", emoji="🏠",
+            style=discord.ButtonStyle.grey, row=2
+        )
+        back.callback = self._make_back()
+        self.add_item(back)
 
-    @discord.ui.select(placeholder="📂 Выбери категорию…", min_values=1, max_values=1)
-    async def select_cat(self, interaction: discord.Interaction, select: discord.ui.Select):
-        cat_key = select.values[0]
-        embed = _build_category_embed(self.bot, cat_key)
-        await interaction.response.edit_message(embed=embed, view=self)
+    def _make_callback(self, cat_key):
+        async def cb(interaction: discord.Interaction):
+            embed = _build_category_embed(self.bot, cat_key)
+            await interaction.response.edit_message(embed=embed, view=self)
+        return cb
 
-    @discord.ui.button(label="◀ Назад", style=discord.ButtonStyle.grey, emoji="🏠")
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = _build_main_embed(self.bot)
-        await interaction.response.edit_message(embed=embed, view=self)
+    def _make_back(self):
+        async def cb(interaction: discord.Interaction):
+            embed = _build_main_embed(self.bot)
+            await interaction.response.edit_message(embed=embed, view=self)
+        return cb
 
 
 def setup_help(bot):
