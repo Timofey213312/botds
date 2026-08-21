@@ -1,8 +1,8 @@
 """
-Модуль системы тикетов (устойчивая версия)
-- !ticket — сообщение с кнопкой «Открыть тикет»
+Модуль системы тикетов (обновлённая, эстетичная версия)
+- !ticket — красивое сообщение с выбором темы тикета (select)
 - !ticket-add / !ticket-remove — управление участниками тикета
-- Кнопка «Закрыть тикет» с сохранением транскрипта
+- Кнопка «Закрыть тикет» с подтверждением и сохранением транскрипта
 """
 
 import io
@@ -18,6 +18,14 @@ logger = logging.getLogger('discord_bot.tickets')
 
 EMBED_COLOR = 0x9000FF
 TICKET_PREFIX = 'ticket-'
+
+TICKET_CATEGORIES = [
+    ("question", "💬 Вопрос", "Задайте вопрос администрации клана"),
+    ("complaint", "🚨 Жалоба", "Пожалуйтесь на нарушение или спамера"),
+    ("suggestion", "💡 Предложение", "Поделитесь идеей для сервера"),
+    ("bug", "🐛 Проблема", "Сообщите о баге или технической проблеме"),
+    ("other", "📌 Другое", "Любая другая тема"),
+]
 
 
 def _staff_roles(guild):
@@ -78,7 +86,14 @@ def _find_transcript_channel(guild):
     return None
 
 
-async def _open_ticket(interaction):
+def _category_label(key):
+    for k, label, _ in TICKET_CATEGORIES:
+        if k == key:
+            return label
+    return "📌 Другое"
+
+
+async def _open_ticket(interaction, category_key="other"):
     user = interaction.user
     guild = interaction.guild
 
@@ -121,7 +136,8 @@ async def _open_ticket(interaction):
             view_channel=True, send_messages=True, read_message_history=True
         )
 
-    base_name = f'{TICKET_PREFIX}{_safe_channel_name(user.name)}'
+    cat_label = _category_label(category_key)
+    base_name = f'{TICKET_PREFIX}{category_key}-{_safe_channel_name(user.name)}'
     name = base_name
     existing = {c.name for c in cat.channels}
     count = 2
@@ -131,7 +147,8 @@ async def _open_ticket(interaction):
 
     try:
         channel = await guild.create_text_channel(
-            name, category=cat, overwrites=overwrites, topic=f'owner:{user.id}'
+            name, category=cat, overwrites=overwrites,
+            topic=f'owner:{user.id} | type:{category_key}'
         )
     except discord.Forbidden:
         await interaction.response.send_message(
@@ -147,19 +164,31 @@ async def _open_ticket(interaction):
         return
 
     embed = discord.Embed(
-        title="🎫 Новый тикет",
-        description="Опишите вашу проблему, и администрация скоро ответит.",
+        title=f"{cat_label}",
+        description=(
+            f"Привет, {user.mention}! 👋\n"
+            "Опиши свою ситуацию подробнее, и администрация клана ответит тебе здесь."
+        ),
         color=EMBED_COLOR,
+        timestamp=datetime.now(),
     )
-    embed.add_field(name="Создал", value=user.mention, inline=True)
-    embed.set_footer(text=datetime.now().strftime('%d.%m.%Y %H:%M'))
+    embed.add_field(name="🙋 Автор", value=user.mention, inline=True)
+    embed.add_field(name="📂 Тема", value=cat_label, inline=True)
+    embed.add_field(
+        name="📌 Правила",
+        value="• Будь вежлив\n• Не спами\n• Закрой тикет, когда вопрос решён",
+        inline=False,
+    )
+    if user.avatar:
+        embed.set_thumbnail(url=user.avatar.url)
+    embed.set_footer(text="Система тикетов клана Vector.prod")
 
     try:
         await channel.send(embed=embed, view=CloseTicketButton())
         await interaction.response.send_message(f"✅ Тикет создан: {channel.mention}", ephemeral=True)
     except discord.InteractionResponded:
         await interaction.followup.send(f"✅ Тикет создан: {channel.mention}", ephemeral=True)
-    logger.info(f'{user} создал тикет {channel.name}')
+    logger.info(f'{user} создал тикет {channel.name} (тема: {category_key})')
 
 
 async def _close_ticket(interaction):
@@ -194,15 +223,23 @@ async def _close_ticket(interaction):
     if log_channel:
         try:
             lines = []
-            async for msg in channel.history(limit=100, oldest_first=True):
+            async for msg in channel.history(limit=200, oldest_first=True):
+                if msg.author.bot and not msg.clean_content:
+                    continue
                 lines.append(
                     f'[{msg.created_at.strftime("%d.%m.%Y %H:%M")}] '
                     f'{msg.author.display_name}: {msg.clean_content}'
                 )
             content = "\n".join(lines)
             if content.strip():
+                embed = discord.Embed(
+                    title=f"📝 Транскрипт тикета {channel.name}",
+                    description=f"Закрыл: {user.mention}\nСообщений: {len(lines)}",
+                    color=EMBED_COLOR,
+                    timestamp=datetime.now(),
+                )
                 await log_channel.send(
-                    f"📝 **Транскрипт тикета {channel.name}**",
+                    embed=embed,
                     file=discord.File(io.BytesIO(content.encode('utf-8')), filename=f'{channel.name}.txt'),
                 )
         except Exception as e:
@@ -220,21 +257,26 @@ async def _close_ticket(interaction):
         return
 
     try:
-        await interaction.followup.send("🔒 Тикет закрыт.", ephemeral=True)
+        await interaction.followup.send("🔒 Тикет закрыт и сохранён в логах.", ephemeral=True)
     except Exception:
         pass
     logger.info(f'{user} закрыл тикет {name}')
 
 
-class OpenTicketButton(discord.ui.View):
+class OpenTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        options = [
+            discord.SelectOption(label=label, value=key, description=desc, emoji=label.split()[0])
+            for key, label, desc in TICKET_CATEGORIES
+        ]
+        self.select_cat.options = options
 
-    @discord.ui.button(label="🎫 Открыть тикет", style=discord.ButtonStyle.primary, custom_id="ticket_open")
-    async def open_button(self, interaction, button):
-        logger.info(f'Кнопка «Открыть тикет» нажата пользователем {interaction.user} в {interaction.guild}')
+    @discord.ui.select(placeholder="🎫 Выберите тему тикета…", min_values=1, max_values=1, custom_id="ticket_open")
+    async def select_cat(self, interaction, select):
+        logger.info(f'Открытие тикета ({select.values[0]}) пользователем {interaction.user}')
         try:
-            await _open_ticket(interaction)
+            await _open_ticket(interaction, select.values[0])
         except discord.InteractionResponded:
             pass
         except Exception as e:
@@ -245,6 +287,19 @@ class OpenTicketButton(discord.ui.View):
             logger.error(f'Ошибка открытия тикета: {e}')
 
 
+class CloseConfirmView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.button(label="✅ Да, закрыть", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        await _close_ticket(interaction)
+
+    @discord.ui.button(label="❌ Отмена", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        await interaction.response.edit_message(content="❌ Закрытие отменено.", view=None)
+
+
 class CloseTicketButton(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -252,33 +307,38 @@ class CloseTicketButton(discord.ui.View):
     @discord.ui.button(label="🔒 Закрыть тикет", style=discord.ButtonStyle.danger, custom_id="ticket_close")
     async def close_button(self, interaction, button):
         try:
-            await _close_ticket(interaction)
+            await interaction.response.send_message(
+                "🔒 Вы уверены, что хотите закрыть тикет? Транскрипт будет сохранён.",
+                view=CloseConfirmView(), ephemeral=True)
         except discord.InteractionResponded:
             pass
         except Exception as e:
-            try:
-                await interaction.response.send_message(f"❌ Ошибка при закрытии тикета: {e}", ephemeral=True)
-            except discord.InteractionResponded:
-                pass
             logger.error(f'Ошибка закрытия тикета: {e}')
 
 
 def setup_tickets(bot):
     """Настройка системы тикетов"""
 
-    @bot.hybrid_command(name="ticket", description="Открыть систему тикетов (сообщение с кнопкой)")
+    @bot.hybrid_command(name="ticket", description="Открыть систему тикетов (панель с выбором темы)")
     async def ticket_cmd(ctx: commands.Context):
-        """Создание сообщения с кнопкой открытия тикета"""
+        """Создание панели тикетов"""
         try:
             if not _is_staff(ctx.author):
                 await ctx.send("❌ Недостаточно прав для настройки тикетов.", ephemeral=True)
                 return
             embed = discord.Embed(
                 title="🎫 Система тикетов",
-                description="Нажмите кнопку ниже, чтобы создать тикет и связаться с администрацией.",
+                description=(
+                    "Нужна помощь администрации? Выбери тему тикета из списка ниже, "
+                    "и для тебя создадут приватный канал с модерацией.\n\n"
+                    "**Доступные темы:**\n"
+                    + "\n".join(f"• {label} — {desc}" for _, label, desc in TICKET_CATEGORIES)
+                ),
                 color=EMBED_COLOR,
+                timestamp=datetime.now(),
             )
-            await ctx.send(embed=embed, view=OpenTicketButton())
+            embed.set_footer(text="Vector.prod • Система тикетов")
+            await ctx.send(embed=embed, view=OpenTicketView())
             logger.info(f'{ctx.author} настроил систему тикетов')
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
@@ -322,17 +382,24 @@ def setup_tickets(bot):
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
             logger.error(f'Ошибка ticket-remove: {e}')
 
-    bot.add_view(OpenTicketButton())
+    bot.add_view(OpenTicketView())
     bot.add_view(CloseTicketButton())
     from modules.panels import register_panel
 
     def _build_ticket_panel(guild):
         embed = discord.Embed(
             title="🎫 Система тикетов",
-            description="Нажмите кнопку ниже, чтобы создать тикет и связаться с администрацией.",
+            description=(
+                "Нужна помощь администрации? Выбери тему тикета из списка ниже, "
+                "и для тебя создадут приватный канал с модерацией.\n\n"
+                "**Доступные темы:**\n"
+                + "\n".join(f"• {label} — {desc}" for _, label, desc in TICKET_CATEGORIES)
+            ),
             color=EMBED_COLOR,
+            timestamp=datetime.now(),
         )
-        return embed, OpenTicketButton()
+        embed.set_footer(text="Vector.prod • Система тикетов")
+        return embed, OpenTicketView()
 
     register_panel(
         channel_keywords=('ticket', 'тикет', 'помощь', '🎫'),
