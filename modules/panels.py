@@ -33,8 +33,8 @@ def _find_channel(guild, keywords):
     return None
 
 
-async def _collect_panels(channel, label):
-    """Собирает сообщения бота в канале, содержащие нужную кнопку"""
+async def _collect_panels(channel, label, custom_ids=None):
+    """Собирает сообщения бота в канале, содержащие нужную кнопку/селект"""
     found = []
     try:
         async for message in channel.history(limit=80):
@@ -42,7 +42,17 @@ async def _collect_panels(channel, label):
                 continue
             for row in message.components:
                 for comp in row.children:
-                    if isinstance(comp, discord.Button) and comp.label == label:
+                    comp_label = getattr(comp, 'label', None)
+                    comp_id = getattr(comp, 'custom_id', None)
+                    is_button = 'Button' in type(comp).__name__
+                    is_select = 'Select' in type(comp).__name__
+                    if comp_id and custom_ids and comp_id in custom_ids:
+                        found.append(message)
+                        break
+                    if is_button and comp_label == label:
+                        found.append(message)
+                        break
+                    if is_select and comp_label == label:
                         found.append(message)
                         break
     except Exception as e:
@@ -60,7 +70,7 @@ async def restore_panels(bot):
             if channel is None:
                 continue
             try:
-                removed = await _find_or_send(channel, panel['label'], panel['build'])
+                removed = await _find_or_send(channel, panel['label'], panel['expected_ids'], panel['build'])
                 restored += 1
                 if removed:
                     logger.info(f'Панель «{panel["label"]}» пересоздана в {channel.name} (удалено старых: {removed})')
@@ -71,11 +81,11 @@ async def restore_panels(bot):
     logger.info(f'Авто-восстановление панелей завершено, панелей размещено: {restored}')
 
 
-async def _find_or_send(channel, label, build):
-    """Удаляет все панели с этим label в канале и отправляет одну новую"""
+async def _find_or_send(channel, label, custom_ids, build):
+    """Удаляет все панели с этим label/custom_id в канале и отправляет одну новую"""
     removed = 0
     try:
-        messages = await _collect_panels(channel, label)
+        messages = await _collect_panels(channel, label, custom_ids)
         for msg in messages:
             await msg.delete()
             removed += 1
@@ -97,7 +107,7 @@ async def setup_all_panels(guild, author=None):
         if channel is None:
             results.append(f"⚠️ Канал для «{panel['label']}» не найден")
             continue
-        removed = await _find_or_send(channel, panel['label'], panel['build'])
+        removed = await _find_or_send(channel, panel['label'], panel['expected_ids'], panel['build'])
         results.append(f"✅ «{panel['label']}» → {channel.mention} (удалено старых: {removed})")
 
     # 2. Музыкальная панель — в голосовой канал (где автор или где бот)
