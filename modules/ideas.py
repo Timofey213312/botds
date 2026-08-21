@@ -16,7 +16,7 @@ logger = logging.getLogger('discord_bot.ideas')
 
 EMBED_COLOR = 0x9000FF
 PANEL_CHANNEL_KEYWORDS = ('idea', 'иде', 'suggest')
-SUBMIT_CHANNEL_KEYWORDS = ('приём-заявок', 'прием-заявок', 'приём', 'прием')
+SUBMIT_CHANNEL_KEYWORDS = ('приём-идей', 'прием-идей', 'приём-заявок', 'прием-заявок')
 STATUS_UNDER_REVIEW = '📝 На рассмотрении'
 STATUS_APPROVED = '✅ Принято'
 STATUS_REJECTED = '❌ Отклонено'
@@ -68,7 +68,7 @@ class IdeaModal(discord.ui.Modal, title="💡 Предложить идею"):
         channel = _find_submit_channel(interaction.guild)
         if channel is None:
             await interaction.response.send_message(
-                "❌ Канал приёма заявок не найден. Создай канал с «приём-заявок» в названии.",
+                "❌ Канал приёма идей не найден. Создай канал с «приём-идей» в названии.",
                 ephemeral=True,
             )
             return
