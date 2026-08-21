@@ -231,7 +231,6 @@ from modules.panels import setup_panels
 from modules.fun import setup_fun
 from modules.economy import setup_economy
 from modules.text import setup_text
-from modules.math_tools import setup_math_tools
 from modules.info import setup_info
 from modules.antispam import setup_antispam
 from modules.automod import setup_automod
@@ -252,7 +251,6 @@ _setups = {
     "fun": setup_fun,
     "economy": setup_economy,
     "text": setup_text,
-    "math_tools": setup_math_tools,
     "info": setup_info,
     "antispam": setup_antispam,
     "automod": setup_automod,

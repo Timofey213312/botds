@@ -67,17 +67,7 @@ CATEGORIES = {
         "commands": ["upper", "lower", "capitalize", "title", "len", "words",
                      "binary", "unbinary", "hex", "unhex", "base64", "unbase64",
                      "md5", "sha1", "sha256", "password", "snake", "kebab", "camel",
-                     "leet", "bold", "italic", "underline", "spoiler", "strike", "box"]
-    },
-    "math": {
-        "name": "Математика",
-        "description": "Вычисления, конвертация",
-        "emoji": "🧮",
-        "color": discord.Color.dark_blue(),
-        "commands": ["add", "sub", "mul", "div", "pow", "sqrt", "cbrt", "sin", "cos", "tan",
-                     "log", "ln", "exp", "abs", "round", "floor", "ceil", "factorial", "fib",
-                     "prime", "divisors", "gcd", "lcm", "percent", "convert", "temp",
-                     "average", "minmax", "area", "distance"]
+                      "leet", "bold", "italic", "underline", "spoiler", "strike", "box"]
     },
     "info": {
         "name": "Информация",
@@ -92,7 +82,7 @@ CATEGORIES = {
 }
 
 # Порядок отображения команд
-CATEGORY_ORDER = ["moderation", "music", "utilities", "fun", "economy", "text", "math", "info"]
+CATEGORY_ORDER = ["moderation", "music", "utilities", "fun", "economy", "text", "info"]
 
 
 def _get_commands(bot, cat_key=None):
