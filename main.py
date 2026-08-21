@@ -213,6 +213,13 @@ class DiscordBot(commands.Bot):
         except Exception as e:
             logger.error(f'Ошибка запуска автовосстановления панелей: {e}')
 
+        # Авто-публикация changelog в канал объявлений при новом обновлении
+        try:
+            from modules.changelog import maybe_post_on_startup
+            asyncio.create_task(maybe_post_on_startup(self))
+        except Exception as e:
+            logger.error(f'Ошибка авто-публикации changelog: {e}')
+
 # Создаем экземпляр бота
 bot = DiscordBot()
 
