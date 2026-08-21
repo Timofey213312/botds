@@ -129,24 +129,38 @@ def setup_antispam(bot):
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
+    CYR_TRANSLIT = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'i', 'к': 'k', 'л': 'l', 'м': 'm',
+        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 'c', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+        'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    }
+
+    def _transliterate(text):
+        text = text or ""
+        text = ''.join(CYR_TRANSLIT.get(ch, ch) for ch in text)
+        return text.lower()
+
     def _scan_text(text):
         norm = _normalize(text)
+        trans = _transliterate(text)
         found = []
         score = 0
         for w in CASINO_WORDS:
-            if w in norm:
+            if w in norm or w in trans:
                 found.append(("казино", w))
                 score += 2 if w in STRONG_WORDS else 1
         for w in DRUG_WORDS:
-            if w in norm:
+            if w in norm or w in trans:
                 found.append(("наркотики", w))
                 score += 3 if w in STRONG_WORDS else 1
         for w in SPAM_WORDS:
-            if w in norm:
+            if w in norm or w in trans:
                 found.append(("спам", w))
                 score += 3
         for d in CASINO_DOMAINS:
-            if d in norm:
+            if d in norm or d in trans:
                 found.append(("казино", d))
                 score += 3
         return score, found
