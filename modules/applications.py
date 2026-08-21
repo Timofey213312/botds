@@ -57,7 +57,7 @@ APPLICATIONS = {
     'partner': {
         'emoji': '🪄',
         'title': 'Заявка на партнёрство',
-        'keywords': ('ᴘᴀʀᴛɴᴇʀ', 'partner'),
+        'keywords': ('ᴨᴀᴩᴛ', 'ᴘᴀʀᴛɴᴇʀ', 'партн', 'partner'),
         'color': 0x00bcd4,
         'requirements': [
             'Иметь полных 13 лет.',
