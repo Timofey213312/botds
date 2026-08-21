@@ -16,7 +16,7 @@ logger = logging.getLogger('discord_bot.ideas')
 
 EMBED_COLOR = 0x9000FF
 PANEL_CHANNEL_KEYWORDS = ('idea', 'иде', 'suggest')
-SUBMIT_CHANNEL_KEYWORDS = ('приём-идей', 'прием-идей', 'приём-заявок', 'прием-заявок')
+SUBMIT_CHANNEL_KEYWORDS = ('приём-идей', 'прием-идей')
 STATUS_UNDER_REVIEW = '📝 На рассмотрении'
 STATUS_APPROVED = '✅ Принято'
 STATUS_REJECTED = '❌ Отклонено'
