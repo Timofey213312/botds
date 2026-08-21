@@ -18,10 +18,12 @@ CATEGORIES = {
         "emoji": "⚖️",
         "color": discord.Color.red(),
         "commands": ["clear", "kick", "ban", "unban", "softban", "hackban", "banlist",
-                     "mute", "timeout", "untimeout", "warn", "unwarn", "warnings", "clearwarn",
-                     "purge", "slowmode", "lock", "unlock", "lockall", "unlockall", "nuke",
-                      "nick", "role", "unrole", "voicekick", "voicemute", "voiceunmute", "moveall",
-                      "report", "antispam", "automod"]
+                      "mute", "unmute", "timeout", "untimeout", "warn", "unwarn", "warnings", "clearwarn",
+                      "purge", "slowmode", "lock", "unlock", "lockall", "unlockall", "nuke",
+                       "nick", "role", "unrole", "roleall", "derole", "voicekick", "voicemute",
+                       "voiceunmute", "voicedeafen", "voiceundeafen", "moveall", "massban",
+                       "multikick", "botclear", "cleanup", "snipe", "modlog", "report",
+                       "antispam", "automod"]
     },
     "music": {
         "name": "Музыка",

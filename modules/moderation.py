@@ -9,11 +9,30 @@ from discord import app_commands
 import asyncio
 from datetime import datetime, timedelta
 import logging
+import re
 
 logger = logging.getLogger('discord_bot.moderation')
 
 def setup_moderation(bot):
     """Настройка команд модерации"""
+
+    if not hasattr(bot, "_snipe_cache"):
+        bot._snipe_cache = {}
+    if not hasattr(bot, "_modlog_cache"):
+        bot._modlog_cache = {}
+
+    async def _modlog_channel(guild_id):
+        await bot.db.execute('''
+            CREATE TABLE IF NOT EXISTS modlog_settings (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER DEFAULT NULL
+            )
+        ''')
+        await bot.db.commit()
+        cursor = await bot.db.execute(
+            "SELECT channel_id FROM modlog_settings WHERE guild_id = ?", (guild_id,))
+        row = await cursor.fetchone()
+        return row[0] if row and row[0] else None
     
     @bot.hybrid_command(name="clear", description="Очистить сообщения в канале (1-100)")
     @app_commands.describe(amount="Количество сообщений для очистки (1-100)")
@@ -863,5 +882,294 @@ def setup_moderation(bot):
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
             logger.error(f'Ошибка clearwarn: {e}')
+
+    @bot.hybrid_command(name="unmute", description="Снять Muted-роль с участника")
+    @app_commands.describe(member="Участник для снятия мута", reason="Причина")
+    @commands.has_permissions(manage_roles=True)
+    async def unmute_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "Не указана"):
+        """Снять роль Muted"""
+        try:
+            muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
+            if not muted_role or muted_role not in member.roles:
+                await ctx.send(f"❌ У **{member.display_name}** нет роли Muted.", ephemeral=True)
+                return
+            await member.remove_roles(muted_role, reason=reason)
+            await ctx.send(f"🔊 С участника **{member.mention}** снят мут.", ephemeral=True)
+            logger.info(f'{ctx.author} снял мут с {member.name}: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка unmute: {e}')
+
+    @bot.hybrid_command(name="massban", description="Забанить нескольких (ID или @упоминания через пробел)")
+    @app_commands.describe(targets="ID или @упоминания через пробел", reason="Причина")
+    @commands.has_permissions(ban_members=True)
+    async def massban_cmd(ctx: commands.Context, targets: str, *, reason: str = "Массовый бан"):
+        """Массовый бан по ID/упоминаниям"""
+        try:
+            ids = [int(x) for x in re.findall(r'\d{15,}', targets)]
+            if not ids:
+                await ctx.send("❌ Не найдено ни одного ID/упоминания.", ephemeral=True)
+                return
+            banned = 0
+            for uid in dict.fromkeys(ids):
+                try:
+                    await ctx.guild.ban(discord.Object(id=uid), reason=reason, delete_message_days=1)
+                    banned += 1
+                except Exception:
+                    pass
+            await ctx.send(f"🔨 Забанено: **{banned}** из {len(ids)}.", ephemeral=True)
+            logger.info(f'{ctx.author} забанил массово {banned} пользователей: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка massban: {e}')
+
+    @bot.hybrid_command(name="multikick", description="Кикнуть нескольких (ID или @упоминания через пробел)")
+    @app_commands.describe(targets="ID или @упоминания через пробел", reason="Причина")
+    @commands.has_permissions(kick_members=True)
+    async def multikick_cmd(ctx: commands.Context, targets: str, *, reason: str = "Массовый кик"):
+        """Массовый кик по ID/упоминаниям"""
+        try:
+            ids = [int(x) for x in re.findall(r'\d{15,}', targets)]
+            if not ids:
+                await ctx.send("❌ Не найдено ни одного ID/упоминания.", ephemeral=True)
+                return
+            kicked = 0
+            for uid in dict.fromkeys(ids):
+                member = ctx.guild.get_member(uid)
+                if member is None:
+                    continue
+                if member.top_role >= ctx.author.top_role:
+                    continue
+                try:
+                    await member.kick(reason=reason)
+                    kicked += 1
+                except Exception:
+                    pass
+            await ctx.send(f"🚪 Кикнуто: **{kicked}** из {len(ids)}.", ephemeral=True)
+            logger.info(f'{ctx.author} кикнул массово {kicked} пользователей: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка multikick: {e}')
+
+    @bot.hybrid_command(name="botclear", description="Удалить сообщения ботов в канале")
+    @app_commands.describe(amount="Сколько последних сообщений проверить (до 200)")
+    @commands.has_permissions(manage_messages=True)
+    async def botclear_cmd(ctx: commands.Context, amount: int = 50):
+        """Удалить сообщения от ботов"""
+        try:
+            amount = max(1, min(200, amount))
+            deleted = await ctx.channel.purge(limit=amount, check=lambda m: m.author.bot)
+            await ctx.send(f"🧹 Удалено сообщений ботов: **{len(deleted)}**.", ephemeral=True)
+            logger.info(f'{ctx.author} удалил {len(deleted)} сообщений ботов в {ctx.channel.name}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка botclear: {e}')
+
+    @bot.hybrid_command(name="cleanup", description="Удалить сообщения, содержащие текст")
+    @app_commands.describe(text="Текст для поиска", amount="Сколько сообщений проверить (до 200)")
+    @commands.has_permissions(manage_messages=True)
+    async def cleanup_cmd(ctx: commands.Context, text: str, amount: int = 50):
+        """Удалить сообщения с определённым текстом"""
+        try:
+            amount = max(1, min(200, amount))
+            text = text.lower()
+            deleted = await ctx.channel.purge(
+                limit=amount, check=lambda m: text in (m.content or "").lower())
+            await ctx.send(f"🧹 Удалено сообщений с «{text}»: **{len(deleted)}**.", ephemeral=True)
+            logger.info(f'{ctx.author} удалил {len(deleted)} сообщений по тексту в {ctx.channel.name}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка cleanup: {e}')
+
+    @bot.hybrid_command(name="roleall", description="Выдать роль всем участникам (или участникам другой роли)")
+    @app_commands.describe(role="Роль для выдачи", source="Выдать только участникам этой роли (необязательно)")
+    @commands.has_permissions(manage_roles=True)
+    async def roleall_cmd(ctx: commands.Context, role: discord.Role, source: discord.Role = None):
+        """Массовая выдача роли"""
+        try:
+            if role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+                await ctx.send("❌ Роль выше или равна вашей высшей роли.", ephemeral=True)
+                return
+            given = 0
+            async for member in ctx.guild.fetch_members(limit=None):
+                if source and source not in member.roles:
+                    continue
+                if role in member.roles:
+                    continue
+                if member.top_role >= ctx.author.top_role and member != ctx.guild.owner:
+                    continue
+                try:
+                    await member.add_roles(role, reason=f"Массовая выдача модератором {ctx.author}")
+                    given += 1
+                except Exception:
+                    pass
+            await ctx.send(f"✅ Роль **{role.mention}** выдана **{given}** участникам.", ephemeral=True)
+            logger.info(f'{ctx.author} массово выдал роль {role.name} ({given})')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка roleall: {e}')
+
+    @bot.hybrid_command(name="derole", description="Снять роль у всех участников, у кого она есть")
+    @app_commands.describe(role="Роль для снятия")
+    @commands.has_permissions(manage_roles=True)
+    async def derole_cmd(ctx: commands.Context, role: discord.Role):
+        """Массовое снятие роли"""
+        try:
+            if role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+                await ctx.send("❌ Роль выше или равна вашей высшей роли.", ephemeral=True)
+                return
+            removed = 0
+            async for member in ctx.guild.fetch_members(limit=None):
+                if role not in member.roles:
+                    continue
+                try:
+                    await member.remove_roles(role, reason=f"Массовое снятие модератором {ctx.author}")
+                    removed += 1
+                except Exception:
+                    pass
+            await ctx.send(f"✅ Роль **{role.mention}** снята у **{removed}** участников.", ephemeral=True)
+            logger.info(f'{ctx.author} массово снял роль {role.name} ({removed})')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка derole: {e}')
+
+    @bot.hybrid_command(name="voicedeafen", description="Отключить участнику звук в голосе (дефин)")
+    @app_commands.describe(member="Участник", reason="Причина")
+    @commands.has_permissions(mute_members=True)
+    async def voicedeafen_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "Не указана"):
+        """Дефин в голосовом канале"""
+        try:
+            await member.edit(deafen=True, reason=reason)
+            await ctx.send(f"🔇 **{member.display_name}** отключён (дефин).", ephemeral=True)
+            logger.info(f'{ctx.author} дефинул {member.name}: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка voicedeafen: {e}')
+
+    @bot.hybrid_command(name="voiceundeafen", description="Включить звук участнику в голосе")
+    @app_commands.describe(member="Участник", reason="Причина")
+    @commands.has_permissions(mute_members=True)
+    async def voiceundeafen_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = "Не указана"):
+        """Снять дефин"""
+        try:
+            await member.edit(deafen=False, reason=reason)
+            await ctx.send(f"🔊 **{member.display_name}** снова слышит.", ephemeral=True)
+            logger.info(f'{ctx.author} снял дефин с {member.name}: {reason}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка voiceundeafen: {e}')
+
+    @bot.hybrid_command(name="modlog", description="Указать канал логов модерации")
+    @app_commands.describe(channel="Канал для логов (пусто = отключить)")
+    @commands.has_permissions(administrator=True)
+    async def modlog_cmd(ctx: commands.Context, channel: discord.TextChannel = None):
+        """Настроить канал логов модерации (баны/разбаны/таймауты)"""
+        try:
+            await bot.db.execute(
+                "INSERT OR REPLACE INTO modlog_settings (guild_id, channel_id) VALUES (?, ?)",
+                (ctx.guild.id, str(channel.id) if channel else None))
+            await bot.db.commit()
+            if channel:
+                await ctx.send(f"📋 Логи модерации будут в {channel.mention}.", ephemeral=True)
+            else:
+                await ctx.send("📋 Логи модерации отключены.", ephemeral=True)
+            logger.info(f'{ctx.author} установил modlog -> {channel.id if channel else None}')
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка modlog: {e}')
+
+    @bot.listen('on_message_delete')
+    async def _snipe_collector(message):
+        try:
+            if message.guild is None:
+                return
+            if message.author.bot:
+                return
+            bot._snipe_cache[message.channel.id] = {
+                "author": message.author.display_name,
+                "author_id": message.author.id,
+                "content": message.content or "(без текста)",
+                "time": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+                "attachments": [a.url for a in message.attachments],
+            }
+        except Exception:
+            pass
+
+    @bot.hybrid_command(name="snipe", description="Показать последнее удалённое сообщение в канале")
+    @commands.has_permissions(manage_messages=True)
+    async def snipe_cmd(ctx: commands.Context):
+        """Показать последнее удалённое сообщение"""
+        try:
+            data = bot._snipe_cache.get(ctx.channel.id)
+            if not data:
+                await ctx.send("❌ Нет сохранённых удалённых сообщений в этом канале.", ephemeral=True)
+                return
+            embed = discord.Embed(
+                title="🕵️ Последнее удалённое сообщение",
+                description=data["content"],
+                color=discord.Color.greyple(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Автор", value=f"<@{data['author_id']}> ({data['author']})", inline=True)
+            embed.add_field(name="Время удаления", value=data["time"], inline=True)
+            if data["attachments"]:
+                embed.add_field(name="Вложения", value="\n".join(data["attachments"][:5]), inline=False)
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
+            logger.error(f'Ошибка snipe: {e}')
+
+    async def _send_modlog(guild, embed):
+        try:
+            cid = await _modlog_channel(guild.id)
+            if not cid:
+                return
+            ch = guild.get_channel(cid)
+            if ch:
+                await ch.send(embed=embed)
+        except Exception:
+            pass
+
+    @bot.listen('on_member_ban')
+    async def _modlog_ban(guild, user):
+        try:
+            embed = discord.Embed(title="🔨 Участник забанен", color=discord.Color.dark_red(),
+                                  timestamp=datetime.now())
+            embed.add_field(name="Участник", value=f"{user} (`{user.id}`)", inline=False)
+            await _send_modlog(guild, embed)
+        except Exception:
+            pass
+
+    @bot.listen('on_member_unban')
+    async def _modlog_unban(guild, user):
+        try:
+            embed = discord.Embed(title="✅ Участник разбанен", color=discord.Color.green(),
+                                  timestamp=datetime.now())
+            embed.add_field(name="Участник", value=f"{user} (`{user.id}`)", inline=False)
+            await _send_modlog(guild, embed)
+        except Exception:
+            pass
+
+    @bot.listen('on_member_update')
+    async def _modlog_timeout(before, after):
+        try:
+            if before.guild is None:
+                return
+            bt = before.timed_out_until
+            at = after.timed_out_until
+            if bt != at:
+                if at is not None:
+                    embed = discord.Embed(title="⏸️ Выдан таймаут", color=discord.Color.orange(),
+                                          timestamp=datetime.now())
+                    embed.add_field(name="Участник", value=f"{after} (`{after.id}`)", inline=False)
+                    if at:
+                        embed.add_field(name="Истекает", value=at.strftime("%d.%m.%Y %H:%M"), inline=False)
+                else:
+                    embed = discord.Embed(title="✅ Таймаут снят", color=discord.Color.green(),
+                                          timestamp=datetime.now())
+                    embed.add_field(name="Участник", value=f"{after} (`{after.id}`)", inline=False)
+                await _send_modlog(after.guild, embed)
+        except Exception:
+            pass
 
     logger.info("Модуль модерации загружен")
