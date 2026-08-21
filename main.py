@@ -216,6 +216,36 @@ class DiscordBot(commands.Bot):
 # Создаем экземпляр бота
 bot = DiscordBot()
 
+
+# Глобальная проверка: команды доступны только модерации
+async def _is_moderator(user, guild):
+    if user == guild.me:
+        return True
+    if await bot.is_owner(user):
+        return True
+    p = user.guild_permissions
+    return any([
+        p.manage_messages, p.manage_guild, p.kick_members, p.ban_members,
+        p.moderate_members, p.manage_roles, p.manage_channels, p.mute_members,
+        p.move_members, p.manage_nicknames
+    ])
+
+
+async def _global_mod_check(ctx):
+    if getattr(ctx, "guild", None) is None:
+        return False
+    return await _is_moderator(ctx.author, ctx.guild)
+
+
+async def _global_mod_check_app(interaction):
+    if not interaction.guild:
+        return False
+    return await _is_moderator(interaction.user, interaction.guild)
+
+
+bot.add_check(_global_mod_check)
+bot.interaction_check = _global_mod_check_app
+
 # Импортируем модули команд
 from modules.moderation import setup_moderation
 from modules.music import setup_music
