@@ -87,9 +87,29 @@ def setup_antispam(bot):
         return {"enabled": bool(row[0]), "log_channel": row[1], "action": row[2],
                 "timeout_minutes": row[3], "whitelist": row[4]}
 
+    # Двойники букв (homoglyphs), которыми спамеры обходят фильтры
+    HOMOGLYPHS = {
+        'а': 'a', 'А': 'a', 'а': 'a', 'е': 'e', 'Е': 'e', 'ё': 'e', 'Ё': 'e',
+        'с': 'c', 'С': 'c', 'о': 'o', 'О': 'o', 'р': 'p', 'Р': 'p', 'у': 'y',
+        'У': 'y', 'х': 'x', 'Х': 'x', 'і': 'i', 'І': 'i', 'ѕ': 's', 'ѕ': 's',
+        'в': 'b', 'В': 'b', 'к': 'k', 'К': 'k', 'м': 'm', 'М': 'm', 'н': 'h',
+        'Н': 'h', 'т': 't', 'Т': 't', 'ь': '', 'ъ': '',
+        'ᴀ': 'a', 'ᴁ': 'a', 'ᴂ': 'ae', 'ᴃ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e',
+        'ᴈ': 'e', 'ᴉ': 'i', 'ᴊ': 'j', 'ᴋ': 'k', 'ᴌ': 'l', 'ᴍ': 'm', 'ᴎ': 'n',
+        'ᴏ': 'o', 'ᴐ': 'o', 'ᴘ': 'p', 'ᴙ': 'r', 'ᴚ': 'r', 'ᴛ': 't', 'ᴜ': 'u',
+        'ᴠ': 'v', 'ᴡ': 'w', 'ᴢ': 'z', 'ꜱ': 's', 'ᴮ': 'b', 'ꓐ': 'p', 'ꓑ': 'p',
+        'ɑ': 'a', 'ɓ': 'b', 'ϲ': 'c', 'ԁ': 'd', 'е': 'e', 'ҽ': 'e', 'ƒ': 'f',
+        'ց': 'g', 'հ': 'h', 'ɨ': 'i', 'պ': 'p', 'գ': 'q', 'ɾ': 'r', 'ѕ': 's',
+        '𝑡': 't', 'υ': 'u', 'ν': 'v', 'ա': 'w', 'х': 'x', 'γ': 'y', 'զ': 'z',
+        '0': 'o', '1': 'i', '!': 'i', '@': 'a', '$': 's', '5': 's', '8': 'b',
+    }
+
     def _normalize(text):
-        text = (text or "").lower()
+        text = text or ""
+        text = ''.join(HOMOGLYPHS.get(ch, ch) for ch in text)
+        text = text.lower()
         text = re.sub(r'[^a-zа-яё0-9\s]', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def _scan_text(text):
@@ -118,10 +138,19 @@ def setup_antispam(bot):
         if not OCR_AVAILABLE:
             return ""
         try:
-            image = Image.open(io.BytesIO(data))
+            image = Image.open(io.BytesIO(data)).convert("RGB")
             if max(image.size) > 2000:
                 image.thumbnail((2000, 2000))
-            text = await asyncio.to_thread(pytesseract.image_to_string, image, lang='rus+eng')
+            # Предобработка: ч/б + порог для лучшего распознавания стилизованного текста
+            gray = image.convert("L")
+            bw = gray.point(lambda p: 255 if p > 140 else 0)
+            results = []
+            for img in (bw, gray):
+                try:
+                    results.append(await asyncio.to_thread(pytesseract.image_to_string, img, lang='rus+eng'))
+                except Exception:
+                    pass
+            text = "\n".join(r for r in results if r) or ""
             return text or ""
         except Exception as e:
             logger.error(f'Ошибка OCR: {e}')
@@ -326,6 +355,7 @@ def setup_antispam(bot):
             score, found = _scan_text(ocr)
             result = f"OCR доступен: {'Да' if OCR_AVAILABLE else 'Нет'}\n"
             result += f"Распознанный текст:\n```\n{(ocr or '—')[:1500]}\n```\n"
+            result += f"Нормализованный (двойники->ascii):\n```\n{(_normalize(ocr) or '—')[:1500]}\n```\n"
             result += f"Оценка рекламы: {score} (порог 3)\n"
             result += f"Найдено: {', '.join(w[1] for w in found) or '—'}"
             await ctx.send(result)
