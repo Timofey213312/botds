@@ -234,11 +234,11 @@ def setup_antispam(bot):
 
     @bot.listen('on_message')
     async def antispam_listener(message):
-        if message.author.bot:
+        if message.author == bot.user:
             return
         if not message.guild:
             return
-        if not isinstance(message.channel, discord.TextChannel):
+        if not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
             return
 
         settings = await _get_settings(message.guild.id)
@@ -272,14 +272,20 @@ def setup_antispam(bot):
 
         if best_score >= 3:
             category = "казино/ставки" if any(f[0] == "казино" for f in best_words) else "наркотики"
-            try:
-                if message.channel.permissions_for(message.guild.me).manage_messages:
+            extra = ""
+            can_delete = message.channel.permissions_for(message.guild.me).manage_messages
+            if not can_delete:
+                extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (нужен Manage Messages в канале)"
+            else:
+                try:
                     await message.delete()
-            except Exception:
-                pass
+                except discord.Forbidden:
+                    extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (Manage Messages запрещён ролью/иерархией)"
+                except Exception as e:
+                    extra = f"Ошибка удаления: {e}"
             await _punish(message.guild, message.author, settings, f"Антиреклама: {category}")
-            await _log(message.guild, message.author, category, best_words, ocr_text)
-            logger.info(f'Антиреклама: удалена реклама от {message.author} ({category})')
+            await _log(message.guild, message.author, category, best_words, ocr_text, extra=extra)
+            logger.info(f'Антиреклама: реклама от {message.author} ({category}) | {extra or "удалено"}')
 
     @bot.hybrid_command(name="antispam", description="Настройки антирекламы (OCR-мониторинг фото)")
     @app_commands.describe(action="Что сделать", value="Значение")
