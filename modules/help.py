@@ -109,27 +109,34 @@ def _format_cmd(bot, cmd):
 
 
 def _build_main_embed(bot):
-    """Общая помощь: список категорий"""
+    """Общая помощь: список категорий с чипами команд"""
     all_cmds = _get_commands(bot)
     embed = discord.Embed(
-        title="📚 Помощь по командам бота",
-        description=f"Префикс команд: **{bot.command_prefix}**\n"
-                    f"Также поддерживаются slash-команды (`/команда`)\n"
-                    f"Всего команд: **{len(all_cmds)}**\n\n"
-                    f"Используй `{bot.command_prefix}help <категория>` для подробностей.\n"
-                    f"Категории: {', '.join('`' + k + '`' for k in CATEGORY_ORDER)}",
-        color=discord.Color.blue(),
+        title=f"🌟 {getattr(bot.user, 'name', 'Бот')} — все команды",
+        description=(
+            f"Префикс: **`{bot.command_prefix}`**   •   Slash: **`/{bot.command_prefix}`**\n"
+            f"Всего доступно команд: **{len(all_cmds)}**\n\n"
+            f"Выбери категорию ниже и узнай подробности:\n"
+            f"`{bot.command_prefix}help <категория>`"
+        ),
+        color=discord.Color.blurple(),
         timestamp=datetime.now()
     )
+    if getattr(bot.user, "avatar", None):
+        embed.set_thumbnail(url=bot.user.avatar.url)
+
     for cat_key in CATEGORY_ORDER:
         cat = CATEGORIES[cat_key]
-        count = len(_get_commands(bot, cat_key))
+        cmds = _get_commands(bot, cat_key)
+        chips = " ".join(f"`{c.name}`" for c in cmds)
+        if len(chips) > 980:
+            chips = chips[:980] + " …"
         embed.add_field(
-            name=f"{cat['emoji']} {cat['name']} ({count} команд)",
-            value=f"`{bot.command_prefix}help {cat_key}`",
-            inline=True
+            name=f"{cat['emoji']} {cat['name']}  ·  {len(cmds)} команд",
+            value=chips + f"\n⟶ `{bot.command_prefix}help {cat_key}`",
+            inline=False
         )
-    embed.set_footer(text=f"Пример: {bot.command_prefix}help moderation")
+    embed.set_footer(text=f"Пример: {bot.command_prefix}help moderation   •   Сделано с ❤️")
     return embed
 
 
@@ -148,16 +155,18 @@ def _build_category_embed(bot, cat_key):
         color=cat['color'],
         timestamp=datetime.now()
     )
-    # Discord ограничивает embed 25 полями, поэтому группируем команды по 10
-    for i in range(0, len(commands_list), 10):
-        chunk = commands_list[i:i + 10]
+    if getattr(bot.user, "avatar", None):
+        embed.set_thumbnail(url=bot.user.avatar.url)
+
+    for i in range(0, len(commands_list), 8):
+        chunk = commands_list[i:i + 8]
         lines = [_format_cmd(bot, cmd) for cmd in chunk]
         embed.add_field(
-            name=f"Команды {i + 1}–{i + len(chunk)} из {len(commands_list)}",
+            name=f"▸ Команды {i + 1}–{i + len(chunk)}",
             value="\n".join(lines),
             inline=False
         )
-    embed.set_footer(text=f"Всего команд в категории: {len(commands_list)}")
+    embed.set_footer(text=f"{len(commands_list)} команд · {bot.command_prefix}help — все категории")
     return embed
 
 
