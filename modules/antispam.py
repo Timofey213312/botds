@@ -45,6 +45,11 @@ DRUG_WORDS = [
 
 STRONG_WORDS = ["казино", "казик", "1win", "1вин", "фонбет", "1xbet", "мефедрон", "героин", "метадон", "спайс", "экстази"]
 
+SPAM_WORDS = [
+    "mebeast", "mrbeast", "@mebeast", "mr beast", "мрбист", "мебист",
+    "beast", "бист", "beastbot", "beast giveaway", "розыгрыш от beast",
+]
+
 CASINO_DOMAINS = [
     "1win", "1xbet", "fonbet", "winline", "leon", "betboom", "parimatch",
     "ligastavok", "betfair", "marathonbet", "olimpbet", "pari", "winner",
@@ -99,6 +104,10 @@ def setup_antispam(bot):
             if w in norm:
                 found.append(("наркотики", w))
                 score += 3 if w in STRONG_WORDS else 1
+        for w in SPAM_WORDS:
+            if w in norm:
+                found.append(("спам", w))
+                score += 3
         for d in CASINO_DOMAINS:
             if d in norm:
                 found.append(("казино", d))
