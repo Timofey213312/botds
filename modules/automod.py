@@ -1,6 +1,7 @@
 """
-Модуль automod — автоматическая модерация.
-Правило: запрет всех ссылок кроме YouTube в выбранных каналах (медиа-контент).
+Модуль automod — автоматическая модерация ссылок.
+Правило: ссылки запрещены ВЕЗДЕ, кроме канала "медиа-контент".
+В медиа-канале разрешены только ссылки на YouTube (и добавленные домены).
 """
 
 import json
@@ -16,7 +17,7 @@ logger = logging.getLogger('discord_bot.automod')
 
 URL_RE = re.compile(r'https?://[^\s<>]+', re.IGNORECASE)
 
-# Домены, ссылки на которые разрешены по умолчанию
+# Домены, ссылки на которые разрешены в медиа-канале по умолчанию
 DEFAULT_ALLOWED = ["youtube.com", "youtu.be", "youtube-nocookie.com"]
 
 
@@ -32,12 +33,11 @@ def _domain_of(url):
 
 def setup_automod(bot):
 
-    async def _get_channels(guild_id):
+    async def _get(guild_id):
         await bot.db.execute('''
-            CREATE TABLE IF NOT EXISTS automod_linkfilter (
-                guild_id INTEGER,
-                channel_id INTEGER,
-                PRIMARY KEY (guild_id, channel_id)
+            CREATE TABLE IF NOT EXISTS automod_settings (
+                guild_id INTEGER PRIMARY KEY,
+                media_channel_id TEXT DEFAULT NULL
             )
         ''')
         await bot.db.execute('''
@@ -48,8 +48,9 @@ def setup_automod(bot):
         ''')
         await bot.db.commit()
         cursor = await bot.db.execute(
-            "SELECT channel_id FROM automod_linkfilter WHERE guild_id = ?", (guild_id,))
-        channels = [r[0] for r in await cursor.fetchall()]
+            "SELECT media_channel_id FROM automod_settings WHERE guild_id = ?", (guild_id,))
+        row = await cursor.fetchone()
+        media_id = int(row[0]) if row and row[0] else None
         cursor = await bot.db.execute(
             "SELECT domains FROM automod_allowed WHERE guild_id = ?", (guild_id,))
         row = await cursor.fetchone()
@@ -59,7 +60,7 @@ def setup_automod(bot):
                 allowed += json.loads(row[0])
             except Exception:
                 pass
-        return channels, allowed
+        return media_id, allowed
 
     async def _log(guild, member, url, channel):
         try:
@@ -92,9 +93,7 @@ def setup_automod(bot):
             if not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
                 return
 
-            channels, allowed = await _get_channels(message.guild.id)
-            if message.channel.id not in channels:
-                return
+            media_id, allowed = await _get(message.guild.id)
 
             perms = getattr(message.author, "guild_permissions", None)
             if perms is not None and perms.manage_messages:
@@ -105,11 +104,18 @@ def setup_automod(bot):
             if not urls:
                 return
 
+            is_media = (message.channel.id == media_id)
             bad = []
-            for u in urls:
-                dom = _domain_of(u)
-                if dom and dom not in allowed:
-                    bad.append(u)
+
+            if is_media:
+                # В медиа-канале разрешён только YouTube / добавленные домены
+                for u in urls:
+                    dom = _domain_of(u)
+                    if dom and dom not in allowed:
+                        bad.append(u)
+            else:
+                # Везде кроме медиа-канала — любые ссылки запрещены
+                bad = urls
 
             if bad:
                 if message.channel.permissions_for(message.guild.me).manage_messages:
@@ -121,45 +127,37 @@ def setup_automod(bot):
         except Exception as e:
             logger.error(f'ОШИБКА automod_listener: {e}', exc_info=True)
 
-    @bot.hybrid_command(name="automod", description="Автомод: запрет ссылок кроме YouTube")
+    @bot.hybrid_command(name="automod", description="Автомод: запрет ссылок везде кроме медиа-канала")
     @app_commands.describe(action="Что сделать", value="Значение")
     @commands.has_permissions(administrator=True)
     async def automod_cmd(ctx, action: str = "status", value: str = None):
         action = action.lower()
 
         if action == "status":
-            channels, allowed = await _get_channels(ctx.guild.id)
-            ch_mentions = [ctx.guild.get_channel(c).mention for c in channels if ctx.guild.get_channel(c)]
-            embed = discord.Embed(title="Автомод (запрет ссылок)", color=discord.Color.blue())
-            embed.add_field(name="Каналы с фильтром",
-                            value="\n".join(ch_mentions) if ch_mentions else "нет", inline=False)
-            embed.add_field(name="Разрешённые домены",
+            media_id, allowed = await _get(ctx.guild.id)
+            media_ch = ctx.guild.get_channel(media_id) if media_id else None
+            embed = discord.Embed(title="Автомод (ссылки)", color=discord.Color.blue())
+            embed.add_field(name="Медиа-канал (там только YouTube)",
+                            value=media_ch.mention if media_ch else "не задан (ссылки запрещены везде)",
+                            inline=False)
+            embed.add_field(name="Разрешённые домены (в медиа)",
                             value=", ".join(sorted(set(allowed))) or "—", inline=False)
             embed.add_field(name="Команды",
-                            value="links #канал — вкл фильтр\nlinks off #канал — выкл\nallowed add domain.com — добавить домен",
+                            value="media #канал — задать медиа-канал\nallowed add domain.com — добавить домен",
                             inline=False)
             await ctx.send(embed=embed)
             return
 
-        if action == "links":
+        if action == "media":
             if value is None:
-                await ctx.send("Укажите канал: `!automod links #канал` или `links off #канал`")
+                await ctx.send("Укажите канал: `!automod media #📷-медиа-контент`")
                 return
-            parts = value.split()
-            mode = parts[0]
-            cid = int(parts[1].strip().replace("<#", "").replace(">", ""))
-            if mode == "off":
-                await bot.db.execute(
-                    "DELETE FROM automod_linkfilter WHERE guild_id = ? AND channel_id = ?",
-                    (ctx.guild.id, cid))
-                await bot.db.commit()
-                await ctx.send(f"Фильтр ссылок выключен в {ctx.guild.get_channel(cid).mention}")
-            else:
-                await bot.db.execute(
-                    "INSERT OR IGNORE INTO automod_linkfilter (guild_id, channel_id) VALUES (?, ?)",
-                    (ctx.guild.id, cid))
-                await bot.db.commit()
-                await ctx.send(f"Фильтр ссылок (кроме YouTube) включён в {ctx.guild.get_channel(cid).mention}")
+            cid = int(value.strip().replace("<#", "").replace(">", ""))
+            await bot.db.execute(
+                "INSERT OR REPLACE INTO automod_settings (guild_id, media_channel_id) VALUES (?, ?)",
+                (ctx.guild.id, str(cid)))
+            await bot.db.commit()
+            await ctx.send(f"Медиа-канал задан: {ctx.guild.get_channel(cid).mention} (там только YouTube, везде остальном ссылки запрещены)")
             return
 
         if action == "allowed":
@@ -171,7 +169,7 @@ def setup_automod(bot):
                 await ctx.send("Только `!automod allowed add domain.com`")
                 return
             dom = parts[1].lower().replace("www.", "")
-            _, allowed = await _get_channels(ctx.guild.id)
+            _, allowed = await _get(ctx.guild.id)
             if dom not in allowed:
                 allowed.append(dom)
                 await bot.db.execute(
