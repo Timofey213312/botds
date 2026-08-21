@@ -3,6 +3,8 @@ FROM python:3.11-slim
 # Устанавливаем ffmpeg (нужен для музыки) и зависимости сборки
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-rus \
     && rm -rf /var/lib/apt/lists/*
 
 # Рабочая директория

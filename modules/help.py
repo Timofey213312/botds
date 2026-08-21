@@ -20,8 +20,8 @@ CATEGORIES = {
         "commands": ["clear", "kick", "ban", "unban", "softban", "hackban", "banlist",
                      "mute", "timeout", "untimeout", "warn", "unwarn", "warnings", "clearwarn",
                      "purge", "slowmode", "lock", "unlock", "lockall", "unlockall", "nuke",
-                     "nick", "role", "unrole", "voicekick", "voicemute", "voiceunmute", "moveall",
-                     "report"]
+                      "nick", "role", "unrole", "voicekick", "voicemute", "voiceunmute", "moveall",
+                      "report", "antispam"]
     },
     "music": {
         "name": "Музыка",
