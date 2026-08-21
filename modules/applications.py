@@ -1,12 +1,13 @@
 """
-Модуль системы заявок (подача на роли)
-- Авто-панель в каналах: ⚔️ клан, 🎥 медиа, 🪄 партнёр-менеджер, 🛡️ модератор
-- Кнопка «Подать заявку» открывает форму (модальное окно)
-- Заявка публикуется в канале с кнопками «Принять / Отклонить» для администрации
-- Автор получает уведомление о статусе в ЛС
+Модуль системы заявок (канальный формат)
+- Панель с кнопкой «Подать заявку» в каналах: ⚔️ клан, 🎥 медиа, 🪄 партнёр-менеджер, 🛡️ модератор
+- По кнопке создаётся приватный канал для заявителя, бот публикует вопросы
+- Заявитель отвечает прямо в канале
+- Администрация: «Принять / Отклонить / Закрыть» (статус + уведомление в ЛС)
 """
 
 import logging
+import re
 from datetime import datetime
 
 import discord
@@ -15,6 +16,7 @@ from discord.ext import commands
 
 logger = logging.getLogger('discord_bot.applications')
 
+EMBED_COLOR = 0x9000FF
 STATUS_REVIEW = '📝 На рассмотрении'
 STATUS_APPROVED = '✅ Принято'
 STATUS_REJECTED = '❌ Отклонено'
@@ -38,21 +40,18 @@ APPLICATIONS = {
             'Ник человека, который тебя пригласил в клан',
             'Готов ли ты собирать инвентарь с первых дней вайпа и ходить на все клановые ивенты',
         ],
-        'fields': [
-            ('Твои ответы', 'Ответь на вопросы из канала выше — по одному пункту на строку', 4000, True, False),
-        ],
     },
     'media': {
         'emoji': '🎥',
         'title': 'Заявка в медиа-команду',
         'keywords': ('ᴍᴇᴅɪᴀ', 'media'),
         'color': 0xe91e63,
-        'fields': [
-            ('Никнейм', 'Твой никнейм / ID', 100, True, False),
-            ('Что умеешь?', 'Монтаж / дизайн / стримы / другое', 300, True, False),
-            ('Примеры работ (ссылки)', 'Ссылки на портфолио / канал', 1000, True, True),
-            ('Активность', 'Сколько времени готов уделять?', 300, False, False),
-            ('Дополнительно', '', 1000, False, True),
+        'questions': [
+            'Твой никнейм / ID',
+            'Что умеешь? (монтаж / дизайн / стримы / другое)',
+            'Примеры работ (ссылки на портфолио / канал)',
+            'Сколько времени готов уделять проекту?',
+            'Чем можешь быть полезен клану?',
         ],
     },
     'partner': {
@@ -60,12 +59,12 @@ APPLICATIONS = {
         'title': 'Заявка в партнёр-менеджеры',
         'keywords': ('ᴘᴀʀᴛɴᴇʀ', 'partner'),
         'color': 0x00bcd4,
-        'fields': [
-            ('Никнейм / Контакты', 'Ник и где с тобой связаться', 200, True, False),
-            ('Опыт партнёрства', 'Работал ли с проектами? С какими?', 1000, True, True),
-            ('С какими проектами хочешь работать?', '', 1000, False, True),
-            ('Чем можешь быть полезен?', '', 800, False, True),
-            ('Дополнительно', '', 1000, False, True),
+        'questions': [
+            'Твой никнейм / контакты для связи',
+            'Опыт партнёрства (с какими проектами работал)',
+            'С какими проектами хочешь работать?',
+            'Чем можешь быть полезен?',
+            'Дополнительная информация',
         ],
     },
     'moder': {
@@ -73,12 +72,12 @@ APPLICATIONS = {
         'title': 'Заявка в модераторы',
         'keywords': ('ᴍᴏᴅᴇʀ', 'moder', 'модер', 'моде'),
         'color': 0x4caf50,
-        'fields': [
-            ('Никнейм / Возраст', 'Например: Player, 18 лет', 100, True, False),
-            ('Опыт модерации', 'Где модерировал, сколько времени', 1000, True, True),
-            ('Почему именно ты?', 'Почему должен стать модератором', 1000, True, True),
-            ('Активность', 'Сколько онлайна в день', 300, False, False),
-            ('Дополнительно', '', 1000, False, True),
+        'questions': [
+            'Твой никнейм / возраст',
+            'Опыт модерации (где и сколько)',
+            'Почему именно ты должен стать модератором?',
+            'Сколько времени онлайн в день?',
+            'Чем можешь помочь клану?',
         ],
     },
 }
@@ -86,6 +85,10 @@ APPLICATIONS = {
 
 def _is_staff(member):
     return bool(member.guild_permissions.manage_channels or member.guild_permissions.administrator)
+
+
+def _staff_roles(guild):
+    return [r for r in guild.roles if r.permissions.manage_channels and not r.is_default()]
 
 
 def _detect_type(channel):
@@ -96,6 +99,34 @@ def _detect_type(channel):
     return None
 
 
+def _safe_channel_name(name, max_len=28):
+    name = re.sub(r'[^a-z0-9а-яё\-_ ]', '', name.lower()).strip()
+    name = re.sub(r'\s+', '-', name)
+    name = re.sub(r'-+', '-', name).strip('-')
+    return name[:max_len] or 'user'
+
+
+async def _find_or_create_category(guild):
+    for cat in guild.categories:
+        if 'заявк' in (cat.name or '').lower() or 'applicat' in (cat.name or '').lower():
+            return cat
+    if not guild.me.guild_permissions.manage_channels:
+        return None
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True, manage_channels=True),
+    }
+    for role in _staff_roles(guild):
+        overwrites[role] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True, manage_channels=True)
+    try:
+        return await guild.create_category('📝 Заявки', overwrites=overwrites)
+    except Exception as e:
+        logger.error(f'Ошибка создания категории заявок: {e}')
+        return None
+
+
 def _find_field_index(embed, prefix):
     for i, f in enumerate(embed.fields):
         if f.name.startswith(prefix):
@@ -103,72 +134,103 @@ def _find_field_index(embed, prefix):
     return None
 
 
-class ApplicationModal(discord.ui.Modal):
-    q1 = discord.ui.TextInput(label="Вопрос 1", max_length=100)
-    q2 = discord.ui.TextInput(label="Вопрос 2", max_length=300, required=False)
-    q3 = discord.ui.TextInput(label="Вопрос 3", max_length=1000, required=False, style=discord.TextStyle.paragraph)
-    q4 = discord.ui.TextInput(label="Вопрос 4", max_length=1000, required=False, style=discord.TextStyle.paragraph)
-    q5 = discord.ui.TextInput(label="Вопрос 5", max_length=1000, required=False, style=discord.TextStyle.paragraph)
+async def _open_application(interaction, key):
+    user = interaction.user
+    guild = interaction.guild
 
-    def __init__(self, key, guild):
-        cfg = APPLICATIONS[key]
-        super().__init__(title=f"{cfg['emoji']} {cfg['title']}")
-        self.key = key
-        self.guild = guild
-        for i, f in enumerate(cfg['fields'], start=1):
-            label, placeholder, max_len, required, paragraph = f
-            field = getattr(self, f'q{i}')
-            field.label = label
-            field.placeholder = placeholder or ''
-            field.max_length = max_len
-            field.required = required
-            field.style = discord.TextStyle.paragraph if paragraph else discord.TextStyle.short
+    if not guild.me.guild_permissions.manage_channels:
+        await interaction.response.send_message(
+            "❌ У бота нет прав `Управлять каналами`.", ephemeral=True)
+        return
 
-    async def on_submit(self, interaction):
-        cfg = APPLICATIONS[self.key]
-        user = interaction.user
+    cat = await _find_or_create_category(guild)
+    if cat is None:
+        await interaction.response.send_message(
+            "❌ Не удалось найти/создать категорию заявок.", ephemeral=True)
+        return
 
-        answers = []
-        for i, f in enumerate(cfg['fields'], start=1):
-            val = getattr(self, f'q{i}').value
-            if val and val.strip():
-                answers.append((f[0], val.strip()))
-
-        if not answers:
-            await interaction.response.send_message("❌ Заявка пустая.", ephemeral=True)
+    # Проверка уже открытой заявки
+    for ch in cat.channels:
+        if ch.topic and f'owner:{user.id}' in ch.topic:
+            try:
+                await interaction.response.send_message(
+                    f"❌ У тебя уже есть открытая заявка: {ch.mention}", ephemeral=True)
+            except discord.InteractionResponded:
+                pass
             return
 
-        embed = discord.Embed(
-            title=f"{cfg['emoji']} {cfg['title']}",
-            description=f"Заявка от {user.mention}",
-            color=cfg['color'],
-            timestamp=datetime.now(),
-        )
-        embed.set_author(name=f"{user.display_name}", icon_url=user.display_avatar.url)
-        if user.display_avatar:
-            embed.set_thumbnail(url=user.display_avatar.url)
-        for label, val in answers:
-            embed.add_field(name=f"• {label}", value=val, inline=False)
-        embed.add_field(name="📌 Статус", value=STATUS_REVIEW, inline=False)
-        embed.set_footer(text=f"ID: {user.id} • type:{self.key} • Vector.prod • Заявки")
+    cfg = APPLICATIONS[key]
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        user: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            attach_files=True, embed_links=True),
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True),
+    }
+    for role in _staff_roles(guild):
+        overwrites[role] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True)
 
-        await interaction.channel.send(embed=embed, view=ApplicationModerationView())
-        await interaction.response.send_message(
-            f"📨 Заявка отправлена в {interaction.channel.mention}. Ожидай решения администрации.",
-            ephemeral=True,
-        )
-        logger.info(f'{user} подал заявку ({self.key}): {cfg["title"]}')
+    base = f"заявка-{key}-{_safe_channel_name(user.name)}"
+    name = base
+    existing = {c.name for c in cat.channels}
+    n = 2
+    while name in existing:
+        name = f"{base}-{n}"
+        n += 1
+
+    try:
+        channel = await guild.create_text_channel(
+            name, category=cat, overwrites=overwrites, topic=f'owner:{user.id} | type:{key}')
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ У бота нет прав создавать каналы.", ephemeral=True)
+        return
+    except Exception as e:
+        logger.error(f'Ошибка создания канала заявки: {e}')
+        try:
+            await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+        return
+
+    embed = discord.Embed(
+        title=f"{cfg['emoji']} {cfg['title']}",
+        description=(
+            f"Здравствуй, {user.mention}! 👋\n"
+            "Ответь на вопросы ниже **прямо в этом канале**, по пунктам. "
+            "Администрация рассмотрит заявку и примет решение ✅ / ❌."
+        ),
+        color=cfg['color'],
+        timestamp=datetime.now(),
+    )
+    if user.display_avatar:
+        embed.set_thumbnail(url=user.display_avatar.url)
+    embed.add_field(
+        name="📋 Вопросы заявки",
+        value="\n".join(f"{i}. {q}" for i, q in enumerate(cfg['questions'], 1)),
+        inline=False,
+    )
+    embed.add_field(name="📌 Статус", value=STATUS_REVIEW, inline=False)
+    embed.set_footer(text=f"ID: {user.id} • type:{key} • Vector.prod • Заявки")
+
+    try:
+        await channel.send(embed=embed, view=ApplicationModerationView())
+        await interaction.response.send_message(f"✅ Заявка создана: {channel.mention}", ephemeral=True)
+    except discord.InteractionResponded:
+        await interaction.followup.send(f"✅ Заявка создана: {channel.mention}", ephemeral=True)
+    logger.info(f'{user} создал заявку ({key}) в канале {channel.name}')
 
 
 class ApplicationModerationView(discord.ui.View):
-    """Кнопки принятия/отклонения заявки (для администрации)"""
+    """Кнопки для администрации: принять / отклонить / закрыть"""
 
     def __init__(self):
         super().__init__(timeout=None)
 
-    async def _update_status(self, interaction, status, color):
+    async def _update_status(self, interaction, status, color, delete=False):
         if not _is_staff(interaction.user):
-            await interaction.response.send_message("❌ Только администрация может менять статус заявки.", ephemeral=True)
+            await interaction.response.send_message("❌ Только администрация.", ephemeral=True)
             return
         embed = interaction.message.embeds[0]
         idx = _find_field_index(embed, '📌 Статус')
@@ -178,19 +240,15 @@ class ApplicationModerationView(discord.ui.View):
         embed.set_footer(text=f"Решение: {interaction.user.display_name} • Vector.prod • Заявки")
         await interaction.response.edit_message(embed=embed, view=None)
 
-        # Уведомление автора в ЛС
         try:
-            import re as _re
-            m = _re.search(r'ID:\s*(\d+)', embed.footer.text or '')
+            m = re.search(r'ID:\s*(\d+)', embed.footer.text or '')
             if m:
                 author = await interaction.guild.fetch_member(int(m.group(1)))
                 if author:
                     msg = discord.Embed(
-                        title=f"{embed.title}",
+                        title=embed.title,
                         description=f"Статус твоей заявки: **{status}**",
-                        color=color,
-                        timestamp=datetime.now(),
-                    )
+                        color=color, timestamp=datetime.now())
                     if author.display_avatar:
                         msg.set_thumbnail(url=author.display_avatar.url)
                     msg.set_footer(text=f"{interaction.guild.name} • Vector.prod • Заявки")
@@ -199,7 +257,15 @@ class ApplicationModerationView(discord.ui.View):
             pass
         except Exception as e:
             logger.error(f'Ошибка уведомления автора заявки: {e}')
-        logger.info(f'{interaction.user} {status} заявку: {embed.title}')
+
+        if delete:
+            try:
+                await interaction.channel.delete()
+                logger.info(f'Заявка закрыта и удалена: {interaction.channel.name}')
+            except Exception as e:
+                logger.error(f'Ошибка удаления канала заявки: {e}')
+        else:
+            logger.info(f'{interaction.user} {status} заявку: {embed.title}')
 
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="apply_accept")
     async def approve(self, interaction, button):
@@ -207,7 +273,22 @@ class ApplicationModerationView(discord.ui.View):
 
     @discord.ui.button(label="❌ Отклонить", style=discord.ButtonStyle.danger, custom_id="apply_reject")
     async def reject(self, interaction, button):
-        await self._update_status(interaction, STATUS_REJECTED, discord.Color.red())
+        await self._update_status(interaction, STATUS_REJECTED, discord.Color.red(), delete=True)
+
+    @discord.ui.button(label="🔒 Закрыть", style=discord.ButtonStyle.secondary, custom_id="apply_close")
+    async def close(self, interaction, button):
+        if not _is_staff(interaction.user):
+            await interaction.response.send_message("❌ Только администрация.", ephemeral=True)
+            return
+        try:
+            await interaction.response.send_message("🔒 Заявка закрыта.", ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+        try:
+            await interaction.channel.delete()
+            logger.info(f'Заявка закрыта вручную: {interaction.channel.name}')
+        except Exception as e:
+            logger.error(f'Ошибка удаления канала заявки: {e}')
 
 
 class ApplicationPanelView(discord.ui.View):
@@ -217,14 +298,13 @@ class ApplicationPanelView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="📝 Подать заявку", style=discord.ButtonStyle.primary, custom_id="apply_open")
-    async def open_modal(self, interaction, button):
+    async def open_app(self, interaction, button):
         key = _detect_type(interaction.channel)
         if key is None:
             await interaction.response.send_message(
-                "❌ Не удалось определить тип заявки для этого канала.", ephemeral=True
-            )
+                "❌ Не удалось определить тип заявки для этого канала.", ephemeral=True)
             return
-        await interaction.response.send_modal(ApplicationModal(key, interaction.guild))
+        await _open_application(interaction, key)
 
 
 def _build_application_panel(guild, key):
@@ -232,9 +312,9 @@ def _build_application_panel(guild, key):
     embed = discord.Embed(
         title=f"{cfg['emoji']} {cfg['title']}",
         description=(
-            "Хочешь присоединиться? Нажми кнопку **«Подать заявку»** ниже, "
-            "заполни форму — и твоя заявка появится здесь.\n\n"
-            "Администрация рассмотрит её и примет решение ✅ / ❌."
+            "Хочешь присоединиться? Нажми кнопку **«Подать заявку»** ниже — "
+            "для тебя откроется приватный канал с вопросами, и ты ответишь прямо там.\n\n"
+            "Администрация рассмотрит заявку и примет решение ✅ / ❌."
         ),
         color=cfg['color'],
         timestamp=datetime.now(),
@@ -254,7 +334,6 @@ def setup_applications(bot):
 
     @bot.hybrid_command(name="apply-setup", description="Разместить панель заявок в текущем канале")
     async def apply_setup_cmd(ctx: commands.Context):
-        """Размещение панели заявок в канале (по типу канала)"""
         try:
             if not _is_staff(ctx.author):
                 await ctx.send("❌ Недостаточно прав.", ephemeral=True)
@@ -285,4 +364,4 @@ def setup_applications(bot):
             expected_ids=["apply_open"],
             build=lambda guild, k=key: _build_application_panel(guild, k),
         )
-    logger.info('Модуль заявок загружен (persistent views: apply_open, apply_accept, apply_reject)')
+    logger.info('Модуль заявок загружен (persistent views: apply_open, apply_accept, apply_reject, apply_close)')
