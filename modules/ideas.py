@@ -74,14 +74,24 @@ class IdeaModal(discord.ui.Modal, title="💡 Предложить идею"):
             return
 
         embed = discord.Embed(
-            title=self.title_field.value,
+            title=f"💡 {self.title_field.value}",
             description=self.description.value or "_(без описания)_",
             color=EMBED_COLOR,
             timestamp=datetime.now(),
         )
-        embed.set_author(name=f"💡 Идея от {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
-        embed.add_field(name="Статус", value=STATUS_UNDER_REVIEW, inline=False)
-        embed.set_footer(text=f"ID: {interaction.user.id} • {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+        embed.set_author(
+            name=f"Идея от {interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar.url,
+        )
+        if interaction.user.display_avatar:
+            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.add_field(name="📌 Статус", value=STATUS_UNDER_REVIEW, inline=False)
+        embed.add_field(
+            name="🗳 Голосование",
+            value="Голосуйте реакциями 👍 / 👎 под этим сообщением",
+            inline=False,
+        )
+        embed.set_footer(text=f"ID: {interaction.user.id} • Vector.prod • Идеи")
 
         msg = await channel.send(embed=embed, view=IdeaModerationView())
         await msg.add_reaction('👍')
@@ -105,10 +115,8 @@ class IdeaModerationView(discord.ui.View):
             return
         embed = interaction.message.embeds[0]
         embed.color = color
-        embed.set_field_at(0, name="Статус", value=status, inline=False)
-        embed.set_footer(
-            text=f"{embed.footer.text if embed.footer.text else ''} • {interaction.user.display_name}"
-        )
+        embed.set_field_at(0, name="📌 Статус", value=status, inline=False)
+        embed.set_footer(text=f"Решение: {interaction.user.display_name} • Vector.prod • Идеи")
         await interaction.response.edit_message(embed=embed, view=None)
 
         # Уведомление автора идеи в ЛС
@@ -125,12 +133,15 @@ class IdeaModerationView(discord.ui.View):
             if not author:
                 return
             msg = discord.Embed(
-                title=f"💡 Статус вашей идеи",
+                title="💡 Статус вашей идеи",
                 description=f"Идея: **{embed.title}**\n\nСтатус: **{status}**",
                 color=embed.color,
+                timestamp=datetime.now(),
             )
+            if author.display_avatar:
+                msg.set_thumbnail(url=author.display_avatar.url)
             msg.add_field(name="Описание", value=(embed.description or '_(без описания)_')[:500], inline=False)
-            msg.set_footer(text=interaction.guild.name)
+            msg.set_footer(text=f"{interaction.guild.name} • Vector.prod • Идеи")
             await author.send(embed=msg)
         except discord.Forbidden:
             pass
@@ -176,11 +187,17 @@ def setup_ideas(bot):
                 return
 
             embed = discord.Embed(
-                title="💡 Предложи идею",
-                description="Нажми кнопку ниже, чтобы отправить свою идею.\n"
-                            "Администрация рассмотрит её и поставит статус.",
+                title="💡 Система идей",
+                description=(
+                    "У тебя есть предложение для клана? Поделись им!\n\n"
+                    "Нажми кнопку **«Предложить идею»** ниже, заполни форму, и твоя идея "
+                    "появится в канале приёма заявок с голосованием 👍 / 👎.\n"
+                    "Администрация рассмотрит её и поставит статус ✅ / ❌."
+                ),
                 color=EMBED_COLOR,
+                timestamp=datetime.now(),
             )
+            embed.set_footer(text="Vector.prod • Идеи")
             await channel.send(embed=embed, view=IdeaPanelView())
             logger.info(f'{ctx.author} разместил панель идей в {channel.name}')
         except Exception as e:
@@ -193,11 +210,17 @@ def setup_ideas(bot):
 
     def _build_idea_panel(guild):
         embed = discord.Embed(
-            title="💡 Предложи идею",
-            description="Нажми кнопку ниже, чтобы отправить свою идею.\n"
-                        "Администрация рассмотрит её и поставит статус.",
+            title="💡 Система идей",
+            description=(
+                "У тебя есть предложение для клана? Поделись им!\n\n"
+                "Нажми кнопку **«Предложить идею»** ниже, заполни форму, и твоя идея "
+                "появится в канале приёма заявок с голосованием 👍 / 👎.\n"
+                "Администрация рассмотрит её и поставит статус ✅ / ❌."
+            ),
             color=EMBED_COLOR,
+            timestamp=datetime.now(),
         )
+        embed.set_footer(text="Vector.prod • Идеи")
         return embed, IdeaPanelView()
 
     register_panel(
