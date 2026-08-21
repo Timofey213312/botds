@@ -234,6 +234,7 @@ from modules.text import setup_text
 from modules.math_tools import setup_math_tools
 from modules.info import setup_info
 from modules.antispam import setup_antispam
+from modules.automod import setup_automod
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -254,6 +255,7 @@ _setups = {
     "math_tools": setup_math_tools,
     "info": setup_info,
     "antispam": setup_antispam,
+    "automod": setup_automod,
 }
 for _name, _fn in _setups.items():
     try:
