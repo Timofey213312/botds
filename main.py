@@ -233,7 +233,6 @@ from modules.economy import setup_economy
 from modules.text import setup_text
 from modules.math_tools import setup_math_tools
 from modules.info import setup_info
-from modules.antispam import setup_antispam
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -253,7 +252,6 @@ _setups = {
     "text": setup_text,
     "math_tools": setup_math_tools,
     "info": setup_info,
-    "antispam": setup_antispam,
 }
 for _name, _fn in _setups.items():
     try:
