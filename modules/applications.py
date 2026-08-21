@@ -59,13 +59,18 @@ APPLICATIONS = {
         'title': 'Заявка в партнёр-менеджеры',
         'keywords': ('ᴘᴀʀᴛɴᴇʀ', 'partner'),
         'color': 0x00bcd4,
-        'questions': [
-            'Твой никнейм / контакты для связи',
-            'Опыт партнёрства (с какими проектами работал)',
-            'С какими проектами хочешь работать?',
-            'Чем можешь быть полезен?',
-            'Дополнительная информация',
+        'requirements': [
+            'Иметь полных 13 лет.',
+            'Быть стрессоустойчивым и адекватным.',
+            'Готовность работать в коллективе и помогать друг другу.',
+            'Уметь искать и оформлять партнёрства.',
         ],
+        'benefits': [
+            'Дружный и общительный коллектив.',
+            'Опыт и знания в данной сфере.',
+            'Роль выше других участников.',
+        ],
+        'note': 'После выбора раздела вопросы откроются лично, а ответы увидит только администрация.',
     },
     'moder': {
         'emoji': '🛡️',
@@ -132,6 +137,30 @@ def _find_field_index(embed, prefix):
         if f.name.startswith(prefix):
             return i
     return None
+
+
+def _add_app_fields(embed, cfg):
+    """Добавляет в эмбед блоки требований / бонусов / вопросов / примечания"""
+    if cfg.get('requirements'):
+        embed.add_field(
+            name="📋 Требования",
+            value="\n".join(f"• {r}" for r in cfg['requirements']),
+            inline=False,
+        )
+    if cfg.get('benefits'):
+        embed.add_field(
+            name="🎁 Что вы получите взамен",
+            value="\n".join(f"• {b}" for b in cfg['benefits']),
+            inline=False,
+        )
+    if cfg.get('questions'):
+        embed.add_field(
+            name="❓ Вопросы заявки",
+            value="\n".join(f"{i}. {q}" for i, q in enumerate(cfg['questions'], 1)),
+            inline=False,
+        )
+    if cfg.get('note'):
+        embed.add_field(name="ℹ️ Примечание", value=cfg['note'], inline=False)
 
 
 async def _open_application(interaction, key):
@@ -206,11 +235,7 @@ async def _open_application(interaction, key):
     )
     if user.display_avatar:
         embed.set_thumbnail(url=user.display_avatar.url)
-    embed.add_field(
-        name="📋 Вопросы заявки",
-        value="\n".join(f"{i}. {q}" for i, q in enumerate(cfg['questions'], 1)),
-        inline=False,
-    )
+    _add_app_fields(embed, cfg)
     embed.add_field(name="📌 Статус", value=STATUS_REVIEW, inline=False)
     embed.set_footer(text=f"ID: {user.id} • type:{key} • Vector.prod • Заявки")
 
@@ -319,12 +344,7 @@ def _build_application_panel(guild, key):
         color=cfg['color'],
         timestamp=datetime.now(),
     )
-    if cfg.get('questions'):
-        embed.add_field(
-            name="📋 Вопросы заявки",
-            value="\n".join(f"{i}. {q}" for i, q in enumerate(cfg['questions'], 1)),
-            inline=False,
-        )
+    _add_app_fields(embed, cfg)
     embed.set_footer(text="Vector.prod • Заявки")
     return embed, ApplicationPanelView()
 
