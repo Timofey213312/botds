@@ -75,7 +75,7 @@ CASINO_DOMAINS = [
 
 ACTIONS = ["delete", "timeout", "ban"]
 
-ANTISPAM_VERSION = "2.3 (проверка ботов-спамеров + транслит + лог прав)"
+ANTISPAM_VERSION = "2.4 (без пропуска модераторов/спамеров с правами)"
 
 def setup_antispam(bot):
     """Настройка антирекламы с OCR"""
@@ -270,11 +270,6 @@ def setup_antispam(bot):
             except Exception:
                 whitelist = []
             if message.channel.id in whitelist:
-                return
-            # Пропускаем только тех, у кого точно есть guild_permissions (модераторы).
-            # У вебхуков/некоторых авторов этого поля может не быть — не падаем.
-            author_perms = getattr(message.author, "guild_permissions", None)
-            if author_perms is not None and author_perms.manage_messages:
                 return
 
             text_score, text_found = _scan_text(message.content)
