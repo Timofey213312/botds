@@ -109,15 +109,14 @@ def _format_cmd(bot, cmd):
 
 
 def _build_main_embed(bot):
-    """Общая помощь: список категорий с чипами команд"""
+    """Общая помощь: минималистичный обзор + навигация через select"""
     all_cmds = _get_commands(bot)
     embed = discord.Embed(
-        title=f"🌟 {getattr(bot.user, 'name', 'Бот')} — все команды",
+        title=f"{getattr(bot.user, 'name', 'Бот')}",
         description=(
-            f"Префикс: **`{bot.command_prefix}`**   •   Slash: **`/{bot.command_prefix}`**\n"
-            f"Всего доступно команд: **{len(all_cmds)}**\n\n"
-            f"Выбери категорию ниже и узнай подробности:\n"
-            f"`{bot.command_prefix}help <категория>`"
+            f"Префикс команд: **`{bot.command_prefix}`**   •   Slash: **`/{bot.command_prefix}`**\n"
+            f"Всего команд: **{len(all_cmds)}**\n\n"
+            f"Открой категорию через меню ниже ⌄"
         ),
         color=discord.Color.blurple(),
         timestamp=datetime.now()
@@ -127,16 +126,13 @@ def _build_main_embed(bot):
 
     for cat_key in CATEGORY_ORDER:
         cat = CATEGORIES[cat_key]
-        cmds = _get_commands(bot, cat_key)
-        chips = " ".join(f"`{c.name}`" for c in cmds)
-        if len(chips) > 980:
-            chips = chips[:980] + " …"
+        count = len(_get_commands(bot, cat_key))
         embed.add_field(
-            name=f"{cat['emoji']} {cat['name']}  ·  {len(cmds)} команд",
-            value=chips + f"\n⟶ `{bot.command_prefix}help {cat_key}`",
-            inline=False
+            name=f"{cat['emoji']}  {cat['name']}",
+            value=f"{count} команд",
+            inline=True
         )
-    embed.set_footer(text=f"Пример: {bot.command_prefix}help moderation   •   Сделано с ❤️")
+    embed.set_footer(text="Выбери категорию в меню ↓")
     return embed
 
 
@@ -150,7 +146,7 @@ def _build_category_embed(bot, cat_key):
     commands_list.sort(key=lambda c: c.name)
 
     embed = discord.Embed(
-        title=f"{cat['emoji']} {cat['name']}",
+        title=f"{cat['emoji']}  {cat['name']}",
         description=cat['description'],
         color=cat['color'],
         timestamp=datetime.now()
@@ -162,12 +158,39 @@ def _build_category_embed(bot, cat_key):
         chunk = commands_list[i:i + 8]
         lines = [_format_cmd(bot, cmd) for cmd in chunk]
         embed.add_field(
-            name=f"▸ Команды {i + 1}–{i + len(chunk)}",
+            name=f"Команды {i + 1}–{i + len(chunk)}",
             value="\n".join(lines),
             inline=False
         )
-    embed.set_footer(text=f"{len(commands_list)} команд · {bot.command_prefix}help — все категории")
+    embed.set_footer(text=f"{len(commands_list)} команд · выбери другую в меню ↓")
     return embed
+
+
+class HelpView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=180)
+        self.bot = bot
+        options = []
+        for cat_key in CATEGORY_ORDER:
+            cat = CATEGORIES[cat_key]
+            options.append(discord.ui.Select.option(
+                label=cat['name'][:100],
+                value=cat_key,
+                emoji=cat['emoji'],
+                description=cat['description'][:100]
+            ))
+        self.select_cat.options = options
+
+    @discord.ui.select(placeholder="📂 Выбери категорию…", min_values=1, max_values=1)
+    async def select_cat(self, interaction: discord.Interaction, select: discord.ui.Select):
+        cat_key = select.values[0]
+        embed = _build_category_embed(self.bot, cat_key)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="◀ Назад", style=discord.ButtonStyle.grey, emoji="🏠")
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = _build_main_embed(self.bot)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 
 def setup_help(bot):
@@ -178,11 +201,12 @@ def setup_help(bot):
     async def help_cmd(ctx: commands.Context, category: str = None):
         """Команда помощи по боту"""
         try:
+            view = HelpView(bot)
             if category and category.lower() in CATEGORIES:
                 embed = _build_category_embed(bot, category.lower())
             else:
                 embed = _build_main_embed(bot)
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, view=view)
             logger.info(f'{ctx.author} использовал команду help')
         except Exception as e:
             logger.error(f'Ошибка help: {e}', exc_info=True)
