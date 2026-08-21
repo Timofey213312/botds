@@ -75,6 +75,8 @@ CASINO_DOMAINS = [
 
 ACTIONS = ["delete", "timeout", "ban"]
 
+ANTISPAM_VERSION = "2.3 (проверка ботов-спамеров + транслит + лог прав)"
+
 def setup_antispam(bot):
     """Настройка антирекламы с OCR"""
 
@@ -316,6 +318,7 @@ def setup_antispam(bot):
             embed.add_field(name="Канал логов", value=log_ch.mention if log_ch else "Не задан", inline=True)
             embed.add_field(name="Таймаут (мин)", value=str(settings["timeout_minutes"]), inline=True)
             embed.add_field(name="OCR доступен", value="Да" if OCR_AVAILABLE else "Нет (tesseract не установлен)", inline=True)
+            embed.add_field(name="Версия модуля", value=ANTISPAM_VERSION, inline=False)
             embed.add_field(name="Команды", value="on / off / logchannel #канал / action delete|timeout|ban / timeout <мин> / whitelist add|remove #канал / test", inline=False)
             await ctx.send(embed=embed)
             return
