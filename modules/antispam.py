@@ -74,10 +74,10 @@ def setup_antispam(bot):
         row = await cursor.fetchone()
         if row is None:
             await bot.db.execute(
-                "INSERT INTO antispam_settings (guild_id, enabled, log_channel, action, timeout_minutes, whitelist) VALUES (?, 1, NULL, 'timeout', 10, '[]')",
+                "INSERT INTO antispam_settings (guild_id, enabled, log_channel, action, timeout_minutes, whitelist) VALUES (?, 1, NULL, 'delete', 10, '[]')",
                 (guild_id,))
             await bot.db.commit()
-            return {"enabled": True, "log_channel": None, "action": "timeout",
+            return {"enabled": True, "log_channel": None, "action": "delete",
                     "timeout_minutes": 10, "whitelist": "[]"}
         return {"enabled": bool(row[0]), "log_channel": row[1], "action": row[2],
                 "timeout_minutes": row[3], "whitelist": row[4]}
