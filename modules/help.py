@@ -23,7 +23,7 @@ CATEGORIES = {
                        "nick", "role", "unrole", "roleall", "derole", "voicekick", "voicemute",
                        "voiceunmute", "voicedeafen", "voiceundeafen", "moveall", "massban",
                        "multikick", "botclear", "cleanup", "snipe", "modlog", "report",
-                       "apply-setup", "antispam", "automod"]
+                       "apply-setup", "market-setup", "antispam", "automod"]
     },
     "music": {
         "name": "Музыка",
