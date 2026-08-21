@@ -266,6 +266,7 @@ from modules.antispam import setup_antispam
 from modules.automod import setup_automod
 from modules.applications import setup_applications
 from modules.market import setup_market
+from modules.changelog import setup_changelog
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -288,6 +289,7 @@ _setups = {
     "automod": setup_automod,
     "applications": setup_applications,
     "market": setup_market,
+    "changelog": setup_changelog,
 }
 for _name, _fn in _setups.items():
     try:
