@@ -21,7 +21,7 @@ CATEGORIES = {
                      "mute", "timeout", "untimeout", "warn", "unwarn", "warnings", "clearwarn",
                      "purge", "slowmode", "lock", "unlock", "lockall", "unlockall", "nuke",
                       "nick", "role", "unrole", "voicekick", "voicemute", "voiceunmute", "moveall",
-                      "report"]
+                      "report", "antispam"]
     },
     "music": {
         "name": "Музыка",
