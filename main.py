@@ -264,6 +264,7 @@ from modules.text import setup_text
 from modules.info import setup_info
 from modules.antispam import setup_antispam
 from modules.automod import setup_automod
+from modules.applications import setup_applications
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -284,6 +285,7 @@ _setups = {
     "info": setup_info,
     "antispam": setup_antispam,
     "automod": setup_automod,
+    "applications": setup_applications,
 }
 for _name, _fn in _setups.items():
     try:
