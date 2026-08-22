@@ -75,7 +75,7 @@ CASINO_DOMAINS = [
     "mostbet", "betcity", "zenitbet", "fon.bet", "mellacasino", "drgn43.casino",
 ]
 
-ACTIONS = ["delete", "timeout", "ban"]
+ACTIONS = ["delete", "timeout", "ban", "kick"]
 
 ANTISPAM_VERSION = "2.4 (без пропуска модераторов/спамеров с правами)"
 
@@ -100,10 +100,10 @@ def setup_antispam(bot):
         row = await cursor.fetchone()
         if row is None:
             await bot.db.execute(
-                "INSERT INTO antispam_settings (guild_id, enabled, log_channel, action, timeout_minutes, whitelist) VALUES (?, 1, NULL, 'delete', 10, '[]')",
+                "INSERT INTO antispam_settings (guild_id, enabled, log_channel, action, timeout_minutes, whitelist) VALUES (?, 1, NULL, 'kick', 10, '[]')",
                 (guild_id,))
             await bot.db.commit()
-            return {"enabled": True, "log_channel": None, "action": "delete",
+            return {"enabled": True, "log_channel": None, "action": "kick",
                     "timeout_minutes": 10, "whitelist": "[]"}
         return {"enabled": bool(row[0]), "log_channel": row[1], "action": row[2],
                 "timeout_minutes": row[3], "whitelist": row[4]}
@@ -220,6 +220,9 @@ def setup_antispam(bot):
         try:
             if action == "delete":
                 return
+            elif action == "kick":
+                if guild.me.guild_permissions.kick_members:
+                    await member.kick(reason=reason)
             elif action == "timeout":
                 minutes = settings.get("timeout_minutes", 10)
                 if guild.me.guild_permissions.moderate_members:
@@ -356,7 +359,7 @@ def setup_antispam(bot):
 
         if action == "action":
             if value not in ACTIONS:
-                await ctx.send("Действие должно быть: delete / timeout / ban")
+                await ctx.send("Действие должно быть: delete / timeout / ban / kick")
                 return
             await bot.db.execute("UPDATE antispam_settings SET action = ? WHERE guild_id = ?", (value, ctx.guild.id))
             await bot.db.commit()
