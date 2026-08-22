@@ -40,6 +40,8 @@ CASINO_WORDS = [
     "тотал", "фору", "ординар", "ставки на спорт", "играть бесплатно",
     "демо счёт", "честное казино", "топ казино", "лучшее казино", "рабочее зеркал",
     "ставок", "бк", "выигрыш", "ставочка",
+    "drgn43.casino", "деньги поступают сразу", "на баланс", "сразу на баланс",
+    "меллстрой", "казино", "регистрации",
 ]
 
 DRUG_WORDS = [
@@ -57,20 +59,20 @@ DRUG_WORDS = [
 
 STRONG_WORDS = ["казино", "казик", "1win", "1вин", "фонбет", "1xbet", "мефедрон",
                 "героин", "метадон", "спайс", "экстази", "мелстрой", "мистер бист",
-                "mrbeast", "мефедрон"]
+                "mrbeast", "мефедрон", "меллстрой", "drgn43.casino"]
 
 SPAM_WORDS = [
     "mebeast", "mrbeast", "@mebeast", "mr beast", "мистер бист", "мистербист",
     "mister beast", "misterbeast", "бист", "беаст", "мистербеаст", "@mrbeast",
     "beast", "beastbot", "beast giveaway", "розыгрыш от beast", "giveaway",
     "бесплатный айфон", "iphone бесплатно", "free iphone", "розыгрыш денег",
-    "бесплатные деньги", "выиграй айфон", "подарок от", "1000$",
+    "бесплатные деньги", "выиграй айфон", "подарок от", "1000$", "ha",
 ]
 
 CASINO_DOMAINS = [
     "1win", "1xbet", "fonbet", "winline", "leon", "betboom", "parimatch",
     "ligastavok", "betfair", "marathonbet", "olimpbet", "pari", "winner",
-    "mostbet", "betcity", "zenitbet", "fon.bet", "mellacasino",
+    "mostbet", "betcity", "zenitbet", "fon.bet", "mellacasino", "drgn43.casino",
 ]
 
 ACTIONS = ["delete", "timeout", "ban"]
