@@ -235,16 +235,6 @@ async def _open_application(interaction, key):
         await interaction.response.send_message(f"✅ Заявка создана: {channel.mention}", ephemeral=True)
     except discord.InteractionResponded:
         await interaction.followup.send(f"✅ Заявка создана: {channel.mention}", ephemeral=True)
-
-    # Пинг @everyone в публичном канале (панель) о новой заявке
-    try:
-        await interaction.channel.send(
-            f"@everyone 📝 Новая заявка **{cfg['title']}** от {user.mention} — {channel.mention}",
-            allowed_mentions=discord.AllowedMentions(everyone=True),
-        )
-    except Exception as e:
-        logger.error(f'Ошибка пинга @everyone при заявке: {e}')
-
     logger.info(f'{user} создал заявку ({key}) в канале {channel.name}')
 
 
