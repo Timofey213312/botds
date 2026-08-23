@@ -236,7 +236,7 @@ COMMANDS_CHANNEL_KEYWORDS = ('команды-ботов', 'команды бот
 # команды, разрешённые в любом канале (модерация + настройка панелей)
 _SETUP_EVERYWHERE = {
     'apply-setup', 'market-setup', 'idea-panel', 'ticket', 'ticket-add',
-    'ticket-remove', 'tempvoice', 'voice-panel', 'setup-panels',
+    'ticket-remove', 'setup-panels',
     'antispam', 'automod',
 }
 
@@ -320,7 +320,6 @@ from modules.welcome import setup_welcome
 from modules.rules import setup_rules
 from modules.tickets import setup_tickets
 from modules.autoclean import setup_autoclean
-from modules.tempvoice import setup_tempvoice
 from modules.ideas import setup_ideas
 from modules.panels import setup_panels
 from modules.fun import setup_fun
@@ -342,7 +341,6 @@ _setups = {
     "rules": setup_rules,
     "tickets": setup_tickets,
     "autoclean": setup_autoclean,
-    "tempvoice": setup_tempvoice,
     "ideas": setup_ideas,
     "panels": setup_panels,
     "fun": setup_fun,
