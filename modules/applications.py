@@ -27,7 +27,7 @@ APPLICATIONS = {
         'title': 'Заявка в клан',
         'keywords': ('ᴄʟᴀɴ', 'clan'),
         'color': 0x9b59b6,
-        'role': '⚔️ || ʏчᴀсник клᴀннᴀ',
+        'role_id': 1511851270921650216,
         'questions': [
             'Играть не менее 3 часов',
             'Успешные кланы, в которых ты играл(а)',
@@ -47,7 +47,7 @@ APPLICATIONS = {
         'title': 'Заявка в медиа-команду',
         'keywords': ('ᴍᴇᴅɪᴀ', 'media'),
         'color': 0xe91e63,
-        'role': '🎬 || ᴍᴇᴅɪᴀ',
+        'role_id': 1511848199478972547,
         'questions': [
             'Ваше настоящее имя',
             'Ваш возраст',
@@ -61,7 +61,7 @@ APPLICATIONS = {
         'title': 'Заявка на партнёрство',
         'keywords': ('ᴨᴀᴩᴛ', 'ᴘᴀʀᴛɴᴇʀ', 'партн', 'partner'),
         'color': 0x00bcd4,
-        'role': '🤝 || ᴘᴀʀᴛɴᴇʀ',
+        'role_id': 1511848598638432356,
         'requirements': [
             'Иметь не менее 50 участников на сервере.',
         ],
@@ -71,7 +71,7 @@ APPLICATIONS = {
         'title': 'Заявка в модераторы',
         'keywords': ('ᴍᴏᴅᴇʀ', 'moder', 'модер', 'моде'),
         'color': 0x4caf50,
-        'role': '🛡️ || ᴍᴏᴅᴇʀ',
+        'role_id': 1511848007149158582,
         'questions': [
             'Твой никнейм / возраст',
             'Опыт модерации (где и сколько)',
@@ -300,17 +300,17 @@ class ApplicationModerationView(discord.ui.View):
         if not m_owner or not m_type:
             return
         cfg = APPLICATIONS.get(m_type.group(1))
-        role_name = cfg.get('role') if cfg else None
-        if not role_name:
+        role_id = cfg.get('role_id') if cfg else None
+        if not role_id:
             return
         guild = interaction.guild
         try:
             member = await guild.fetch_member(int(m_owner.group(1)))
         except Exception:
             return
-        role = discord.utils.get(guild.roles, name=role_name)
+        role = guild.get_role(int(role_id))
         if not role:
-            logger.warning(f'Роль для выдачи не найдена на сервере: {role_name!r}')
+            logger.warning(f'Роль для выдачи не найдена на сервере (ID: {role_id})')
             return
         try:
             await member.add_roles(role, reason=f'Принята заявка ({m_type.group(1)})')
