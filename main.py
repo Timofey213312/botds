@@ -330,6 +330,7 @@ from modules.antispam import setup_antispam
 from modules.automod import setup_automod
 from modules.applications import setup_applications
 from modules.market import setup_market
+from modules.say import setup_say
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -351,6 +352,7 @@ _setups = {
     "automod": setup_automod,
     "applications": setup_applications,
     "market": setup_market,
+    "say": setup_say,
 }
 for _name, _fn in _setups.items():
     try:
