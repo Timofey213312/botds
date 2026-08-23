@@ -33,7 +33,34 @@ def setup_moderation(bot):
             "SELECT channel_id FROM modlog_settings WHERE guild_id = ?", (guild_id,))
         row = await cursor.fetchone()
         return row[0] if row and row[0] else None
-    
+
+    async def _send_modlog(guild, *, action, moderator, target, reason="Не указана", extra=None, color=None):
+        """Отправляет запись о действии модерации в настроенный лог-канал (с доказательствами)"""
+        try:
+            cid = await _modlog_channel(guild.id)
+            if not cid:
+                return
+            ch = guild.get_channel(int(cid))
+            if not ch:
+                return
+            embed = discord.Embed(
+                title=f"📋 {action}",
+                color=color or discord.Color.orange(),
+                timestamp=datetime.now(),
+            )
+            mod = moderator.mention if moderator else "Неизвестно"
+            tgt = target.mention if hasattr(target, "mention") else f"`{target}`"
+            embed.add_field(name="Модератор", value=mod, inline=True)
+            embed.add_field(name="Нарушитель", value=tgt, inline=True)
+            embed.add_field(name="Причина", value=reason or "Не указана", inline=False)
+            if extra:
+                embed.add_field(name="📎 Доказательство", value=str(extra)[:1024], inline=False)
+            tid = getattr(target, "id", None)
+            embed.set_footer(text=f"ID: {tid}" if tid else "Vector.prod • Модерация")
+            await ch.send(embed=embed)
+        except Exception as e:
+            logger.error(f'Ошибка отправки в modlog: {e}')
+
     @bot.hybrid_command(name="clear", description="Очистить сообщения в канале (1-100)")
     @app_commands.describe(amount="Количество сообщений для очистки (1-100)")
     @commands.has_permissions(manage_messages=True)
@@ -105,6 +132,8 @@ def setup_moderation(bot):
             except:
                 pass
                 
+            await _send_modlog(ctx.guild, action="🚪 Кик участника", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.red())
             logger.info(f'{ctx.author} кикнул {member.name} по причине: {reason}')
             
         except Exception as e:
@@ -144,6 +173,8 @@ def setup_moderation(bot):
             except:
                 pass
                 
+            await _send_modlog(ctx.guild, action="🔨 Бан участника", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.dark_red())
             logger.info(f'{ctx.author} забанил {member.name} по причине: {reason}')
             
         except Exception as e:
@@ -194,6 +225,9 @@ def setup_moderation(bot):
             embed.add_field(name="Причина", value=reason, inline=False)
             
             await ctx.send(embed=embed)
+            await _send_modlog(ctx.guild, action="🔇 Мут участника", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.dark_gray(),
+                              extra=f"Длительность: {minutes} мин.")
             logger.info(f'{ctx.author} выдал мут {member.name} на {minutes} минут по причине: {reason}')
 
             # Автоматическое снятие мута
@@ -251,6 +285,9 @@ def setup_moderation(bot):
             embed.add_field(name="Причина", value=reason, inline=False)
             
             await ctx.send(embed=embed)
+            await _send_modlog(ctx.guild, action="⏸️ Таймаут участника", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.orange(),
+                              extra=f"Длительность: {minutes} мин.")
             logger.info(f'{ctx.author} выдал таймаут {member.name} на {minutes} минут по причине: {reason}')
 
         except Exception as e:
@@ -279,6 +316,8 @@ def setup_moderation(bot):
             embed.add_field(name="Причина", value=reason, inline=False)
             
             await ctx.send(embed=embed)
+            await _send_modlog(ctx.guild, action="✅ Таймаут снят", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.green())
             logger.info(f'{ctx.author} снял таймаут с {member.name} по причине: {reason}')
 
         except Exception as e:
@@ -370,6 +409,8 @@ def setup_moderation(bot):
             embed.add_field(name="Модератор", value=ctx.author.mention, inline=True)
             embed.add_field(name="Причина", value=reason, inline=False)
             await ctx.send(embed=embed)
+            await _send_modlog(ctx.guild, action="✅ Разбан участника", moderator=ctx.author,
+                              target=target, reason=reason, color=discord.Color.green())
             logger.info(f'{ctx.author} разбанил {target.name} по причине: {reason}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка при разбане: {e}", ephemeral=True)
@@ -419,6 +460,9 @@ def setup_moderation(bot):
             except:
                 pass
 
+            await _send_modlog(ctx.guild, action="⚠️ Предупреждение", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.orange(),
+                              extra=f"Предупреждение #{warn_id} • всего: {count}")
             logger.info(f'{ctx.author} выдал предупреждение {member.name} (#{warn_id}): {reason}')
 
             # Авто-бан: больше 5 предупреждений — бан на сервере
@@ -686,6 +730,9 @@ def setup_moderation(bot):
             )
             embed.add_field(name="Причина", value=reason, inline=False)
             await ctx.send(embed=embed)
+            await _send_modlog(ctx.guild, action="🛡️ Soft-ban", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.orange(),
+                              extra=f"Удалено сообщений за {days} дн.")
             logger.info(f'{ctx.author} применил soft-ban к {member.name}: {reason}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
@@ -708,6 +755,9 @@ def setup_moderation(bot):
             )
             embed.add_field(name="Причина", value=reason, inline=False)
             await ctx.send(embed=embed)
+            await _send_modlog(ctx.guild, action="🔨 Hackban", moderator=ctx.author,
+                              target=user, reason=reason, color=discord.Color.dark_red(),
+                              extra=f"ID: {uid}")
             logger.info(f'{ctx.author} забанил по ID {uid} ({user}): {reason}')
         except ValueError:
             await ctx.send("❌ ID должен быть числом.", ephemeral=True)
@@ -895,6 +945,8 @@ def setup_moderation(bot):
                 return
             await member.remove_roles(muted_role, reason=reason)
             await ctx.send(f"🔊 С участника **{member.mention}** снят мут.", ephemeral=True)
+            await _send_modlog(ctx.guild, action="🔊 Мут снят", moderator=ctx.author,
+                              target=member, reason=reason, color=discord.Color.green())
             logger.info(f'{ctx.author} снял мут с {member.name}: {reason}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
@@ -918,6 +970,9 @@ def setup_moderation(bot):
                 except Exception:
                     pass
             await ctx.send(f"🔨 Забанено: **{banned}** из {len(ids)}.", ephemeral=True)
+            await _send_modlog(ctx.guild, action="🔨 Массовый бан", moderator=ctx.author,
+                              target=f"{banned} пользователей", reason=reason, color=discord.Color.dark_red(),
+                              extra=targets)
             logger.info(f'{ctx.author} забанил массово {banned} пользователей: {reason}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
