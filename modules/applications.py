@@ -27,6 +27,7 @@ APPLICATIONS = {
         'title': 'Заявка в клан',
         'keywords': ('ᴄʟᴀɴ', 'clan'),
         'color': 0x9b59b6,
+        'role': '⚔️┃-ᴄʟᴀɴ - ⚔️ || ʏчᴀсник клᴀннᴀ',
         'questions': [
             'Играть не менее 3 часов',
             'Успешные кланы, в которых ты играл(а)',
@@ -46,6 +47,7 @@ APPLICATIONS = {
         'title': 'Заявка в медиа-команду',
         'keywords': ('ᴍᴇᴅɪᴀ', 'media'),
         'color': 0xe91e63,
+        'role': '🎥┃-ᴍᴇᴅɪᴀ-🎬 || ᴍᴇᴅɪᴀ',
         'questions': [
             'Ваше настоящее имя',
             'Ваш возраст',
@@ -59,6 +61,7 @@ APPLICATIONS = {
         'title': 'Заявка на партнёрство',
         'keywords': ('ᴨᴀᴩᴛ', 'ᴘᴀʀᴛɴᴇʀ', 'партн', 'partner'),
         'color': 0x00bcd4,
+        'role': '🤝-ᴨᴀᴩᴛнёᴩᴋᴀ-🤝 || ᴘᴀʀᴛɴᴇʀ',
         'requirements': [
             'Иметь не менее 50 участников на сервере.',
         ],
@@ -68,6 +71,7 @@ APPLICATIONS = {
         'title': 'Заявка в модераторы',
         'keywords': ('ᴍᴏᴅᴇʀ', 'moder', 'модер', 'моде'),
         'color': 0x4caf50,
+        'role': '🛡️┃-ᴍᴏᴅᴇʀ-🛡️ || ᴍᴏᴅᴇʀ',
         'questions': [
             'Твой никнейм / возраст',
             'Опыт модерации (где и сколько)',
@@ -254,26 +258,30 @@ class ApplicationModerationView(discord.ui.View):
         if idx is not None:
             embed.set_field_at(idx, name="📌 Статус", value=status, inline=False)
         embed.color = color
+        m = re.search(r'ID:\s*(\d+)', embed.footer.text or '')
+        author = None
+        if m:
+            try:
+                author = await interaction.guild.fetch_member(int(m.group(1)))
+            except Exception:
+                author = None
         embed.set_footer(text=f"Решение: {interaction.user.display_name} • Vector.prod • Заявки")
         await interaction.response.edit_message(embed=embed, view=None)
 
-        try:
-            m = re.search(r'ID:\s*(\d+)', embed.footer.text or '')
-            if m:
-                author = await interaction.guild.fetch_member(int(m.group(1)))
-                if author:
-                    msg = discord.Embed(
-                        title=embed.title,
-                        description=f"Статус твоей заявки: **{status}**",
-                        color=color, timestamp=datetime.now())
-                    if author.display_avatar:
-                        msg.set_thumbnail(url=author.display_avatar.url)
-                    msg.set_footer(text=f"{interaction.guild.name} • Vector.prod • Заявки")
-                    await author.send(embed=msg)
-        except discord.Forbidden:
-            pass
-        except Exception as e:
-            logger.error(f'Ошибка уведомления автора заявки: {e}')
+        if author:
+            try:
+                msg = discord.Embed(
+                    title=embed.title,
+                    description=f"Статус твоей заявки: **{status}**",
+                    color=color, timestamp=datetime.now())
+                if author.display_avatar:
+                    msg.set_thumbnail(url=author.display_avatar.url)
+                msg.set_footer(text=f"{interaction.guild.name} • Vector.prod • Заявки")
+                await author.send(embed=msg)
+            except discord.Forbidden:
+                pass
+            except Exception as e:
+                logger.error(f'Ошибка уведомления автора заявки: {e}')
 
         if delete:
             try:
@@ -284,9 +292,38 @@ class ApplicationModerationView(discord.ui.View):
         else:
             logger.info(f'{interaction.user} {status} заявку: {embed.title}')
 
+    async def _grant_role(self, interaction):
+        """Выдаёт роль заявителю при принятии (берёт owner/type из topic канала)"""
+        topic = getattr(interaction.channel, 'topic', '') or ''
+        m_owner = re.search(r'owner:(\d+)', topic)
+        m_type = re.search(r'type:(\w+)', topic)
+        if not m_owner or not m_type:
+            return
+        cfg = APPLICATIONS.get(m_type.group(1))
+        role_name = cfg.get('role') if cfg else None
+        if not role_name:
+            return
+        guild = interaction.guild
+        try:
+            member = await guild.fetch_member(int(m_owner.group(1)))
+        except Exception:
+            return
+        role = discord.utils.get(guild.roles, name=role_name)
+        if not role:
+            logger.warning(f'Роль для выдачи не найдена на сервере: {role_name!r}')
+            return
+        try:
+            await member.add_roles(role, reason=f'Принята заявка ({m_type.group(1)})')
+            logger.info(f'Выдана роль {role_name!r} участнику {member}')
+        except discord.Forbidden:
+            logger.warning(f'Нет прав на выдачу роли {role_name!r} (иерархия/Manage Roles)')
+        except Exception as e:
+            logger.error(f'Ошибка выдачи роли {role_name!r}: {e}')
+
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="apply_accept")
     async def approve(self, interaction, button):
         await self._update_status(interaction, STATUS_APPROVED, discord.Color.green())
+        await self._grant_role(interaction)
 
     @discord.ui.button(label="❌ Отклонить", style=discord.ButtonStyle.danger, custom_id="apply_reject")
     async def reject(self, interaction, button):
