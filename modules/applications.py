@@ -216,6 +216,7 @@ async def _open_application(interaction, key):
 
     embed = discord.Embed(
         title=f"{cfg['emoji']} {cfg['title']}",
+        thumbnail=True,
         description=(
             f"Здравствуй, {user.mention}! 👋\n"
             "Ответь на вопросы ниже **прямо в этом канале**, по пунктам. "

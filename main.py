@@ -231,20 +231,85 @@ async def _is_moderator(user, guild):
     ])
 
 
+COMMANDS_CHANNEL_KEYWORDS = ('команды-ботов', 'команды ботов', 'commands')
+
+# команды, разрешённые в любом канале (модерация + настройка панелей)
+_SETUP_EVERYWHERE = {
+    'apply-setup', 'market-setup', 'idea-panel', 'ticket', 'ticket-add',
+    'ticket-remove', 'tempvoice', 'voice-panel', 'setup-panels',
+    'antispam', 'automod',
+}
+
+
+def _is_commands_channel(channel):
+    if channel is None:
+        return False
+    name = (getattr(channel, 'name', '') or '').lower()
+    return any(k in name for k in COMMANDS_CHANNEL_KEYWORDS)
+
+
+def _cmd_allowed_anywhere(command):
+    if command is None:
+        return False
+    mod = getattr(getattr(command, 'callback', None), '__module__', None)
+    if mod == 'modules.moderation':
+        return True
+    return getattr(command, 'name', None) in _SETUP_EVERYWHERE
+
+
 async def _global_mod_check(ctx):
     if getattr(ctx, "guild", None) is None:
         return False
-    return await _is_moderator(ctx.author, ctx.guild)
+    if not await _is_moderator(ctx.author, ctx.guild):
+        return False
+    if _cmd_allowed_anywhere(ctx.command):
+        return True
+    return _is_commands_channel(ctx.channel)
 
 
 async def _global_mod_check_app(interaction):
     if not interaction.guild:
         return False
-    return await _is_moderator(interaction.user, interaction.guild)
+    if not await _is_moderator(interaction.user, interaction.guild):
+        return False
+    if _cmd_allowed_anywhere(interaction.command):
+        return True
+    allowed = _is_commands_channel(getattr(interaction, 'channel', None))
+    if not allowed and not interaction.response.is_done():
+        try:
+            await interaction.response.send_message(
+                "❌ Эта команда доступна только в канале 🤖-команды-ботов.",
+                ephemeral=True
+            )
+        except Exception:
+            pass
+    return allowed
 
 
 bot.add_check(_global_mod_check)
 bot.interaction_check = _global_mod_check_app
+
+# Глобальная темизация эмбедов: сине-фиолетовая тема + брендинг (аватар в футере)
+_orig_embed = discord.Embed
+THEME_COLOR = 0x7C5CFC  # фиолетово-синий (Vector.prod)
+BOT_FOOTER = "⟡ Vector.prod — Бот клана"
+
+
+def themed_embed(*args, **kwargs):
+    kwargs.setdefault('color', THEME_COLOR)
+    add_footer = kwargs.pop('footer', True)
+    add_thumb = kwargs.pop('thumbnail', False)
+    embed = _orig_embed(*args, **kwargs)
+    avatar = getattr(getattr(bot, 'user', None), 'avatar', None)
+    if add_footer and not getattr(embed.footer, 'text', None):
+        embed.set_footer(text=BOT_FOOTER, icon_url=avatar.url if avatar else None)
+    if add_thumb and not embed.thumbnail:
+        if avatar:
+            embed.set_thumbnail(url=avatar.url)
+    return embed
+
+
+discord.Embed = themed_embed
 
 # Импортируем модули команд
 from modules.moderation import setup_moderation
@@ -330,9 +395,27 @@ async def on_command_error(ctx, error):
             f"Пример: `/{ctx.command.name}` — поля подскажут.",
             ephemeral=True
         )
+    elif isinstance(error, commands.CheckFailure):
+        if ctx.guild and not await _is_moderator(ctx.author, ctx.guild):
+            await ctx.send("❌ У вас недостаточно прав для выполнения этой команды.", ephemeral=True)
+        else:
+            await ctx.send("❌ Эта команда доступна только в канале 🤖-команды-ботов.", ephemeral=True)
     else:
         logger.error(f"Ошибка команды: {error}")
         await ctx.send("❌ Произошла ошибка при выполнении команды.", ephemeral=True)
+
+
+@bot.event
+async def on_app_command_error(interaction, error):
+    if isinstance(error, commands.CheckFailure):
+        if not await _is_moderator(interaction.user, interaction.guild):
+            msg = "❌ У вас недостаточно прав для выполнения этой команды."
+        else:
+            msg = "❌ Эта команда доступна только в канале 🤖-команды-ботов."
+        if not interaction.response.is_done():
+            await interaction.response.send_message(msg, ephemeral=True)
+        return
+    logger.error(f"Ошибка slash-команды: {error}")
 
 if __name__ == "__main__":
     try:

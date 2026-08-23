@@ -110,6 +110,7 @@ class MarketPanelView(discord.ui.View):
 def _build_market_panel(guild):
     embed = discord.Embed(
         title="🛒 Купи-продай",
+        thumbnail=True,
         description=(
             "Торговая площадка клана. Хочешь продать или купить что-то? "
             "Нажми **«Разместить объявление»**, заполни форму — и твоё предложение "

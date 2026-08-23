@@ -114,7 +114,8 @@ def _build_main_embed(bot):
     """Общая помощь: минималистичный обзор + навигация через select"""
     all_cmds = _get_commands(bot)
     embed = discord.Embed(
-        title=f"{getattr(bot.user, 'name', 'Бот')}",
+        title=f"🤖 {getattr(bot.user, 'name', 'Бот')}",
+        thumbnail=True,
         description=(
             f"Префикс команд: **`{bot.command_prefix}`**   •   Slash: **`/{bot.command_prefix}`**\n"
             f"Всего команд: **{len(all_cmds)}**\n\n"

@@ -171,6 +171,7 @@ async def _open_ticket(interaction, category_key="other"):
         ),
         color=EMBED_COLOR,
         timestamp=datetime.now(),
+        thumbnail=True,
     )
     embed.add_field(name="🙋 Автор", value=user.mention, inline=True)
     embed.add_field(name="📂 Тема", value=cat_label, inline=True)

@@ -41,6 +41,8 @@ def _find_boost_channel(guild):
 def build_welcome_embed(member, guild):
     """Сборка embed приветствия для нового участника (шаблон)"""
     embed = discord.Embed(
+        title="👋 Добро пожаловать",
+        thumbnail=True,
         description=(
             f"Привет — {member.mention}ㅤ\n"
             f"Добро пожаловать на сервер {guild.name}\n"
