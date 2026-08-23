@@ -52,8 +52,8 @@ def setup_moderation(bot):
                 except Exception as e:
                     logger.error(f'Канал логов не найден ({cid}): {e}')
                     return
-            if not isinstance(ch, discord.TextChannel):
-                logger.error(f'Канал логов {cid} не является текстовым каналом')
+            if not hasattr(ch, "send"):
+                logger.error(f'Канал логов {cid} не поддерживает отправку сообщений')
                 return
             embed = discord.Embed(
                 title=f"📋 {action}",
