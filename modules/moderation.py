@@ -21,6 +21,8 @@ def setup_moderation(bot):
     if not hasattr(bot, "_modlog_cache"):
         bot._modlog_cache = {}
 
+    DEFAULT_MODLOG_CHANNEL_ID = "1535655890982801438"  # 🔨-логи
+
     async def _modlog_channel(guild_id):
         await bot.db.execute('''
             CREATE TABLE IF NOT EXISTS modlog_settings (
@@ -32,7 +34,9 @@ def setup_moderation(bot):
         cursor = await bot.db.execute(
             "SELECT channel_id FROM modlog_settings WHERE guild_id = ?", (guild_id,))
         row = await cursor.fetchone()
-        return row[0] if row and row[0] else None
+        if row and row[0]:
+            return row[0]
+        return DEFAULT_MODLOG_CHANNEL_ID
 
     async def _send_modlog(guild, *, action, moderator, target, reason="Не указана", extra=None, color=None):
         """Отправляет подробную запись о действии модерации в настроенный лог-канал"""
