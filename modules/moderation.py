@@ -35,7 +35,7 @@ def setup_moderation(bot):
         return row[0] if row and row[0] else None
 
     async def _send_modlog(guild, *, action, moderator, target, reason="Не указана", extra=None, color=None):
-        """Отправляет запись о действии модерации в настроенный лог-канал (с доказательствами)"""
+        """Отправляет подробную запись о действии модерации в настроенный лог-канал"""
         try:
             cid = await _modlog_channel(guild.id)
             if not cid:
@@ -48,15 +48,36 @@ def setup_moderation(bot):
                 color=color or discord.Color.orange(),
                 timestamp=datetime.now(),
             )
-            mod = moderator.mention if moderator else "Неизвестно"
-            tgt = target.mention if hasattr(target, "mention") else f"`{target}`"
-            embed.add_field(name="Модератор", value=mod, inline=True)
-            embed.add_field(name="Нарушитель", value=tgt, inline=True)
-            embed.add_field(name="Причина", value=reason or "Не указана", inline=False)
+            if moderator:
+                embed.add_field(
+                    name="👮 Модератор",
+                    value=f"{moderator.mention}\n`{moderator.id}`",
+                    inline=True)
+            else:
+                embed.add_field(name="👮 Модератор", value="Неизвестно", inline=True)
+
+            if hasattr(target, "mention"):
+                tgt = f"{target.mention}\n{getattr(target, 'name', '')}"
+                tgt += f"\n`{target.id}`"
+                created = getattr(target, "created_at", None)
+                if created:
+                    tgt += f"\nАккаунт создан: {created.strftime('%d.%m.%Y')}"
+                if isinstance(target, discord.Member):
+                    joined = getattr(target, "joined_at", None)
+                    if joined:
+                        tgt += f"\nЗашёл на сервер: {joined.strftime('%d.%m.%Y')}"
+                    top = target.top_role
+                    if top and top.name != "@everyone":
+                        tgt += f"\nТоп-роль: {top.mention}"
+                embed.add_field(name="👤 Нарушитель", value=tgt, inline=True)
+            else:
+                embed.add_field(name="👤 Нарушитель", value=f"`{target}`", inline=True)
+
+            embed.add_field(name="📝 Причина", value=reason or "Не указана", inline=False)
             if extra:
                 embed.add_field(name="📎 Доказательство", value=str(extra)[:1024], inline=False)
-            tid = getattr(target, "id", None)
-            embed.set_footer(text=f"ID: {tid}" if tid else "Vector.prod • Модерация")
+            embed.add_field(name="🏠 Сервер", value=f"{guild.name} (`{guild.id}`)", inline=False)
+            embed.set_footer(text=f"Vector.prod • Модерация • ID нарушителя: {getattr(target, 'id', '?')}")
             await ch.send(embed=embed)
         except Exception as e:
             logger.error(f'Ошибка отправки в modlog: {e}')
@@ -174,7 +195,8 @@ def setup_moderation(bot):
                 pass
                 
             await _send_modlog(ctx.guild, action="🔨 Бан участника", moderator=ctx.author,
-                              target=member, reason=reason, color=discord.Color.dark_red())
+                              target=member, reason=reason, color=discord.Color.dark_red(),
+                              extra="Удалено сообщений за 7 дней.")
             logger.info(f'{ctx.author} забанил {member.name} по причине: {reason}')
             
         except Exception as e:
@@ -757,7 +779,7 @@ def setup_moderation(bot):
             await ctx.send(embed=embed)
             await _send_modlog(ctx.guild, action="🔨 Hackban", moderator=ctx.author,
                               target=user, reason=reason, color=discord.Color.dark_red(),
-                              extra=f"ID: {uid}")
+                              extra=f"ID: {uid} • удаление сообщений: 0 дн.")
             logger.info(f'{ctx.author} забанил по ID {uid} ({user}): {reason}')
         except ValueError:
             await ctx.send("❌ ID должен быть числом.", ephemeral=True)
@@ -972,7 +994,7 @@ def setup_moderation(bot):
             await ctx.send(f"🔨 Забанено: **{banned}** из {len(ids)}.", ephemeral=True)
             await _send_modlog(ctx.guild, action="🔨 Массовый бан", moderator=ctx.author,
                               target=f"{banned} пользователей", reason=reason, color=discord.Color.dark_red(),
-                              extra=targets)
+                              extra=f"Удалено сообщений за 1 день.\nЦели: {targets}")
             logger.info(f'{ctx.author} забанил массово {banned} пользователей: {reason}')
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}", ephemeral=True)
