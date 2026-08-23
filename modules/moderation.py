@@ -23,6 +23,22 @@ def setup_moderation(bot):
 
     DEFAULT_MODLOG_CHANNEL_ID = "1535655890982801438"  # 🔨-логи
 
+    _modlog_chan_cache = {}
+    _modlog_dedup = {}
+
+    def _modlog_mark(guild_id, action_base, target_id, ttl=8):
+        _modlog_dedup[(guild_id, action_base, str(target_id))] = datetime.now().timestamp() + ttl
+
+    def _modlog_seen(guild_id, action_base, target_id):
+        now = datetime.now().timestamp()
+        key = (guild_id, action_base, str(target_id))
+        exp = _modlog_dedup.get(key)
+        if exp and exp > now:
+            return True
+        if key in _modlog_dedup:
+            del _modlog_dedup[key]
+        return False
+
     async def _modlog_channel(guild_id):
         await bot.db.execute('''
             CREATE TABLE IF NOT EXISTS modlog_settings (
@@ -41,17 +57,25 @@ def setup_moderation(bot):
     async def _send_modlog(guild, *, action, moderator, target, reason="Не указана", extra=None, color=None):
         """Отправляет подробную запись о действии модерации в настроенный лог-канал"""
         try:
+            tid = getattr(target, 'id', None) or str(target)
+            base = action.replace(" (журнал аудита)", "")
+            if _modlog_seen(guild.id, base, tid):
+                return
+            _modlog_mark(guild.id, base, tid)
             cid = await _modlog_channel(guild.id)
             if not cid:
                 return
             cid_i = int(cid)
-            ch = guild.get_channel(cid_i) or bot.get_channel(cid_i)
-            if not ch:
-                try:
-                    ch = await bot.fetch_channel(cid_i)
-                except Exception as e:
-                    logger.error(f'Канал логов не найден ({cid}): {e}')
-                    return
+            ch = _modlog_chan_cache.get(cid_i)
+            if ch is None:
+                ch = guild.get_channel(cid_i) or bot.get_channel(cid_i)
+                if not ch:
+                    try:
+                        ch = await bot.fetch_channel(cid_i)
+                    except Exception as e:
+                        logger.error(f'Канал логов не найден ({cid}): {e}')
+                        return
+                _modlog_chan_cache[cid_i] = ch
             if not hasattr(ch, "send"):
                 logger.error(f'Канал логов {cid} не поддерживает отправку сообщений')
                 return
@@ -108,23 +132,29 @@ def setup_moderation(bot):
     @bot.listen('on_member_ban')
     async def _log_ban_audit(guild, user):
         entry = await _audit_entry(guild, discord.AuditLogAction.ban, user.id)
-        if not entry or entry.user == guild.me:
+        if entry and entry.user == guild.me:
             return
-        await _send_modlog(guild, action="🔨 Бан участника (журнал аудита)", moderator=entry.user,
-                          target=user, reason=entry.reason or "Не указана", color=discord.Color.dark_red())
+        moderator = entry.user if entry else None
+        reason = (entry.reason or "Не указана") if entry else "Не указана (нет доступа к журналу аудита)"
+        await _send_modlog(guild, action="🔨 Бан участника (журнал аудита)", moderator=moderator,
+                          target=user, reason=reason, color=discord.Color.dark_red())
 
     @bot.listen('on_member_unban')
     async def _log_unban_audit(guild, user):
         entry = await _audit_entry(guild, discord.AuditLogAction.unban, user.id)
-        if not entry or entry.user == guild.me:
+        if entry and entry.user == guild.me:
             return
-        await _send_modlog(guild, action="✅ Разбан участника (журнал аудита)", moderator=entry.user,
-                          target=user, reason=entry.reason or "Не указана", color=discord.Color.green())
+        moderator = entry.user if entry else None
+        reason = (entry.reason or "Не указана") if entry else "Не указана (нет доступа к журналу аудита)"
+        await _send_modlog(guild, action="✅ Разбан участника (журнал аудита)", moderator=moderator,
+                          target=user, reason=reason, color=discord.Color.green())
 
     @bot.listen('on_member_remove')
     async def _log_kick_audit(member):
         entry = await _audit_entry(member.guild, discord.AuditLogAction.kick, member.id)
-        if not entry or entry.user == member.guild.me:
+        if not entry:
+            return  # без записи аудита не отличить кик от добровольного выхода
+        if entry.user == member.guild.me:
             return
         await _send_modlog(member.guild, action="🚪 Кик участника (журнал аудита)", moderator=entry.user,
                           target=member, reason=entry.reason or "Не указана", color=discord.Color.red())
@@ -141,10 +171,12 @@ def setup_moderation(bot):
                 action, color = "✅ Таймаут снят (журнал аудита)", discord.Color.green()
                 extra = None
             entry = await _audit_entry(guild, discord.AuditLogAction.member_update, after.id)
-            if not entry or entry.user == guild.me:
+            if entry and entry.user == guild.me:
                 return
-            await _send_modlog(guild, action=action, moderator=entry.user, target=after,
-                              reason=entry.reason or "Не указана", color=color, extra=extra)
+            moderator = entry.user if entry else None
+            reason = (entry.reason or "Не указана") if entry else "Не указана (нет доступа к журналу аудита)"
+            await _send_modlog(guild, action=action, moderator=moderator, target=after,
+                              reason=reason, color=color, extra=extra)
             return
         # Мут-роль
         muted_role = discord.utils.get(guild.roles, name="Muted")
@@ -153,16 +185,41 @@ def setup_moderation(bot):
             now = muted_role in after.roles
             if now and not had:
                 entry = await _audit_entry(guild, discord.AuditLogAction.member_update, after.id)
-                if not entry or entry.user == guild.me:
+                if entry and entry.user == guild.me:
                     return
-                await _send_modlog(guild, action="🔇 Мут участника (журнал аудита)", moderator=entry.user,
-                                  target=after, reason=entry.reason or "Не указана", color=discord.Color.dark_gray())
+                moderator = entry.user if entry else None
+                reason = (entry.reason or "Не указана") if entry else "Не указана (нет доступа к журналу аудита)"
+                await _send_modlog(guild, action="🔇 Мут участника (журнал аудита)", moderator=moderator,
+                                  target=after, reason=reason, color=discord.Color.dark_gray())
             elif had and not now:
                 entry = await _audit_entry(guild, discord.AuditLogAction.member_update, after.id)
-                if not entry or entry.user == guild.me:
+                if entry and entry.user == guild.me:
                     return
-                await _send_modlog(guild, action="🔊 Мут снят (журнал аудита)", moderator=entry.user,
-                                  target=after, reason=entry.reason or "Не указана", color=discord.Color.green())
+                moderator = entry.user if entry else None
+                reason = (entry.reason or "Не указана") if entry else "Не указана (нет доступа к журналу аудита)"
+                await _send_modlog(guild, action="🔊 Мут снят (журнал аудита)", moderator=moderator,
+                                  target=after, reason=reason, color=discord.Color.green())
+
+    @bot.listen('on_ready')
+    async def _modlog_diagnostic():
+        if getattr(bot, '_modlog_checked', False):
+            return
+        bot._modlog_checked = True
+        try:
+            cid = DEFAULT_MODLOG_CHANNEL_ID
+            ch = bot.get_channel(int(cid)) or await bot.fetch_channel(int(cid))
+            if not ch or not hasattr(ch, "send"):
+                logger.warning(f'Modlog: канал {cid} не найден или недоступен для отправки')
+                return
+            perms = ch.permissions_for(ch.guild.me)
+            if not perms.send_messages:
+                logger.warning(f'Modlog: у бота НЕТ прав на отправку сообщений в канал {cid} ({ch.name})')
+            elif not perms.view_channel:
+                logger.warning(f'Modlog: у бота НЕТ доступа к просмотру канала {cid} ({ch.name})')
+            else:
+                logger.info(f'Modlog: канал логов готов — #{ch.name} ({cid})')
+        except Exception as e:
+            logger.warning(f'Modlog: не удалось проверить канал логов {DEFAULT_MODLOG_CHANNEL_ID}: {e}')
 
     @bot.hybrid_command(name="clear", description="Очистить сообщения в канале (1-100)")
     @app_commands.describe(amount="Количество сообщений для очистки (1-100)")
@@ -197,7 +254,12 @@ def setup_moderation(bot):
                 pass
             
             logger.info(f'{ctx.author} очистил {amount} сообщений в {ctx.channel.name}')
-            
+            await _send_modlog(ctx.guild, action="🧹 Очистка сообщений",
+                              moderator=ctx.author, target=ctx.channel,
+                              reason="Не указана",
+                              color=discord.Color.blue(),
+                              extra=f"Канал: #{ctx.channel.name}\nУдалено: {len(deleted)-1 if deleted else 0} сообщений")
+
         except Exception as e:
             await ctx.send(f"❌ Ошибка при очистке: {e}", ephemeral=True)
             logger.error(f'Ошибка очистки: {e}')
