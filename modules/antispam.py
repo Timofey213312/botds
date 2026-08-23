@@ -297,6 +297,10 @@ def setup_antispam(bot):
                 else:
                     try:
                         await message.delete()
+                        try:
+                            await message.channel.send("БРУХ НЕ ПОЛУЧИЛОСЬ ANTISPAM DETECT")
+                        except Exception:
+                            pass
                     except discord.Forbidden:
                         extra = "НЕТ ПРАВ НА УДАЛЕНИЕ (Manage Messages запрещён ролью/иерархией)"
                     except Exception as e:
