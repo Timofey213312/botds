@@ -298,7 +298,7 @@ def setup_antispam(bot):
                     try:
                         await message.delete()
                         try:
-                            await message.channel.send("БРУХ НЕ ПОЛУЧИЛОСЬ ANTISPAM DETECT")
+                            await message.channel.send(f"БРУХ НЕ ПОЛУЧИЛОСЬ ANTISPAM DETECT {message.author.mention}")
                         except Exception:
                             pass
                     except discord.Forbidden:
