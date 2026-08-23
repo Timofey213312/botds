@@ -114,7 +114,11 @@ def setup_moderation(bot):
                 embed.add_field(name="📎 Доказательство", value=str(extra)[:1024], inline=False)
             embed.add_field(name="🏠 Сервер", value=f"{guild.name} (`{guild.id}`)", inline=False)
             embed.set_footer(text=f"Vector.prod • Модерация • ID нарушителя: {getattr(target, 'id', '?')}")
-            await ch.send(embed=embed)
+            try:
+                await ch.send(embed=embed)
+            except Exception as e:
+                _modlog_chan_cache.pop(cid_i, None)
+                logger.error(f'Ошибка отправки в modlog: {e}')
         except Exception as e:
             logger.error(f'Ошибка отправки в modlog: {e}')
 
