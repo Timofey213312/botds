@@ -79,41 +79,58 @@ def setup_moderation(bot):
             if not hasattr(ch, "send"):
                 logger.error(f'Канал логов {cid} не поддерживает отправку сообщений')
                 return
+            now = datetime.now()
             embed = discord.Embed(
-                title=f"📋 {action}",
-                color=color or discord.Color.orange(),
-                timestamp=datetime.now(),
+                title=action,
+                color=color or discord.Color(0x7C5CFC),
+                timestamp=now,
+                description=f"🕒 Зафиксировано {discord.utils.format_dt(now, style='R')}",
             )
+            bot_avatar = getattr(getattr(bot, 'user', None), 'display_avatar', None)
+            embed.set_author(
+                name="Vector.prod • Журнал модерации",
+                icon_url=bot_avatar.url if bot_avatar else discord.Embed.Empty)
+
+            thumb_set = False
             if moderator:
-                embed.add_field(
-                    name="👮 Модератор",
-                    value=f"{moderator.mention}\n`{moderator.id}`",
-                    inline=True)
+                mod_val = f"{moderator.mention}\nID: `{moderator.id}`"
+                if isinstance(moderator, discord.Member):
+                    top = moderator.top_role
+                    if top and top.name != "@everyone":
+                        mod_val += f"\nРоль: {top.mention}"
+                if getattr(moderator, 'display_avatar', None):
+                    embed.set_thumbnail(url=moderator.display_avatar.url)
+                    thumb_set = True
             else:
-                embed.add_field(name="👮 Модератор", value="Неизвестно", inline=True)
+                mod_val = "Неизвестно (нет доступа к журналу аудита)"
+            embed.add_field(name="👮 Модератор", value=mod_val, inline=True)
 
             if hasattr(target, "mention"):
-                tgt = f"{target.mention}\n{getattr(target, 'name', '')}"
-                tgt += f"\n`{target.id}`"
+                tgt = f"{target.mention}\nНик: `{getattr(target, 'name', '')}`\nID: `{target.id}`"
                 created = getattr(target, "created_at", None)
                 if created:
-                    tgt += f"\nАккаунт создан: {created.strftime('%d.%m.%Y')}"
+                    tgt += (f"\n📅 Аккаунт: {discord.utils.format_dt(created, style='D')} "
+                            f"({discord.utils.format_dt(created, style='R')})")
                 if isinstance(target, discord.Member):
                     joined = getattr(target, "joined_at", None)
                     if joined:
-                        tgt += f"\nЗашёл на сервер: {joined.strftime('%d.%m.%Y')}"
+                        tgt += f"\n🚪 Зашёл: {discord.utils.format_dt(joined, style='D')}"
                     top = target.top_role
                     if top and top.name != "@everyone":
-                        tgt += f"\nТоп-роль: {top.mention}"
+                        tgt += f"\n🎭 Топ-роль: {top.mention}"
+                if not thumb_set and getattr(target, 'display_avatar', None):
+                    embed.set_thumbnail(url=target.display_avatar.url)
                 embed.add_field(name="👤 Нарушитель", value=tgt, inline=True)
             else:
-                embed.add_field(name="👤 Нарушитель", value=f"`{target}`", inline=True)
+                embed.add_field(name="👤 Объект", value=f"`{target}`", inline=True)
 
             embed.add_field(name="📝 Причина", value=reason or "Не указана", inline=False)
             if extra:
                 embed.add_field(name="📎 Доказательство", value=str(extra)[:1024], inline=False)
-            embed.add_field(name="🏠 Сервер", value=f"{guild.name} (`{guild.id}`)", inline=False)
-            embed.set_footer(text=f"Vector.prod • Модерация • ID нарушителя: {getattr(target, 'id', '?')}")
+            embed.add_field(name="🏠 Сервер", value=f"{guild.name} [`{guild.id}`]", inline=False)
+            embed.set_footer(
+                text=f"Vector.prod • Модерация • ID нарушителя: {getattr(target, 'id', '?')}",
+                icon_url=bot_avatar.url if bot_avatar else discord.Embed.Empty)
             try:
                 await ch.send(embed=embed)
             except Exception as e:
