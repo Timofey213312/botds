@@ -44,8 +44,16 @@ def setup_moderation(bot):
             cid = await _modlog_channel(guild.id)
             if not cid:
                 return
-            ch = guild.get_channel(int(cid))
+            cid_i = int(cid)
+            ch = guild.get_channel(cid_i) or bot.get_channel(cid_i)
             if not ch:
+                try:
+                    ch = await bot.fetch_channel(cid_i)
+                except Exception as e:
+                    logger.error(f'Канал логов не найден ({cid}): {e}')
+                    return
+            if not isinstance(ch, discord.TextChannel):
+                logger.error(f'Канал логов {cid} не является текстовым каналом')
                 return
             embed = discord.Embed(
                 title=f"📋 {action}",
