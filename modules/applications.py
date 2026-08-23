@@ -285,7 +285,8 @@ class ApplicationModerationView(discord.ui.View):
             try:
                 await interaction.channel.send(
                     f"{author.mention}, твоя заявка: **{status}**. "
-                    "Закрой её кнопкой **«🔒 Закрыть заявку»**.",
+                    "Если вопросов больше нет и всё решено — будем благодарны, если закроешь "
+                    "её кнопкой **«🔒 Закрыть заявку»** ☺️",
                     allowed_mentions=discord.AllowedMentions(users=[author]))
             except Exception as e:
                 logger.error(f'Ошибка пинга автора заявки: {e}')
