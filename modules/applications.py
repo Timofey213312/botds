@@ -266,7 +266,7 @@ class ApplicationModerationView(discord.ui.View):
             except Exception:
                 author = None
         embed.set_footer(text=f"Решение: {interaction.user.display_name} • Vector.prod • Заявки")
-        await interaction.response.edit_message(embed=embed, view=None)
+        await interaction.response.edit_message(embed=embed, view=ApplicationCloseView())
 
         if author:
             try:
@@ -282,6 +282,13 @@ class ApplicationModerationView(discord.ui.View):
                 pass
             except Exception as e:
                 logger.error(f'Ошибка уведомления автора заявки: {e}')
+            try:
+                await interaction.channel.send(
+                    f"{author.mention}, твоя заявка: **{status}**. "
+                    "Закрой её кнопкой **«🔒 Закрыть заявку»** ниже.",
+                    allowed_mentions=discord.AllowedMentions(users=[author]))
+            except Exception as e:
+                logger.error(f'Ошибка пинга автора заявки: {e}')
 
         if delete:
             try:
@@ -327,7 +334,7 @@ class ApplicationModerationView(discord.ui.View):
 
     @discord.ui.button(label="❌ Отклонить", style=discord.ButtonStyle.danger, custom_id="apply_reject")
     async def reject(self, interaction, button):
-        await self._update_status(interaction, STATUS_REJECTED, discord.Color.red(), delete=True)
+        await self._update_status(interaction, STATUS_REJECTED, discord.Color.red())
 
     @discord.ui.button(label="🔒 Закрыть", style=discord.ButtonStyle.secondary, custom_id="apply_close")
     async def close(self, interaction, button):
@@ -341,6 +348,37 @@ class ApplicationModerationView(discord.ui.View):
         try:
             await interaction.channel.delete()
             logger.info(f'Заявка закрыта вручную: {interaction.channel.name}')
+        except Exception as e:
+            logger.error(f'Ошибка удаления канала заявки: {e}')
+
+
+class ApplicationCloseView(discord.ui.View):
+    """Кнопка закрытия заявки для создателя (после принятия/отклонения)"""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def _can_close(self, interaction):
+        topic = getattr(interaction.channel, 'topic', '') or ''
+        m = re.search(r'owner:(\d+)', topic)
+        owner_id = int(m.group(1)) if m else None
+        if owner_id and interaction.user.id == owner_id:
+            return True
+        return _is_staff(interaction.user)
+
+    @discord.ui.button(label="🔒 Закрыть заявку", style=discord.ButtonStyle.danger, custom_id="apply_user_close")
+    async def close_app(self, interaction, button):
+        if not await self._can_close(interaction):
+            await interaction.response.send_message(
+                "❌ Только создатель заявки или администрация может закрыть её.", ephemeral=True)
+            return
+        try:
+            await interaction.response.send_message("🔒 Заявка закрыта.")
+        except discord.InteractionResponded:
+            pass
+        try:
+            await interaction.channel.delete()
+            logger.info(f'Заявка закрыта пользователем/админом: {interaction.channel.name}')
         except Exception as e:
             logger.error(f'Ошибка удаления канала заявки: {e}')
 
@@ -404,6 +442,7 @@ def setup_applications(bot):
 
     bot.add_view(ApplicationPanelView())
     bot.add_view(ApplicationModerationView())
+    bot.add_view(ApplicationCloseView())
     from modules.panels import register_panel
 
     for key, cfg in APPLICATIONS.items():
