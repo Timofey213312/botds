@@ -1120,6 +1120,7 @@ def setup_moderation(bot):
     async def modlog_cmd(ctx: commands.Context, channel: discord.TextChannel = None):
         """Настроить канал логов модерации (баны/разбаны/таймауты)"""
         try:
+            await _modlog_channel(ctx.guild.id)  # создаёт таблицу при необходимости
             await bot.db.execute(
                 "INSERT OR REPLACE INTO modlog_settings (guild_id, channel_id) VALUES (?, ?)",
                 (ctx.guild.id, str(channel.id) if channel else None))
