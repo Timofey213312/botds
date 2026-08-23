@@ -260,30 +260,13 @@ def _cmd_allowed_anywhere(command):
 async def _global_mod_check(ctx):
     if getattr(ctx, "guild", None) is None:
         return False
-    if not await _is_moderator(ctx.author, ctx.guild):
-        return False
-    if _cmd_allowed_anywhere(ctx.command):
-        return True
-    return _is_commands_channel(ctx.channel)
+    return await _is_moderator(ctx.author, ctx.guild)
 
 
 async def _global_mod_check_app(interaction):
     if not interaction.guild:
         return False
-    if not await _is_moderator(interaction.user, interaction.guild):
-        return False
-    if _cmd_allowed_anywhere(interaction.command):
-        return True
-    allowed = _is_commands_channel(getattr(interaction, 'channel', None))
-    if not allowed and not interaction.response.is_done():
-        try:
-            await interaction.response.send_message(
-                "❌ Эта команда доступна только в канале 🤖-команды-ботов.",
-                ephemeral=True
-            )
-        except Exception:
-            pass
-    return allowed
+    return await _is_moderator(interaction.user, interaction.guild)
 
 
 bot.add_check(_global_mod_check)
