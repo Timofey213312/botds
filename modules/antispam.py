@@ -263,6 +263,15 @@ def setup_antispam(bot):
             if not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
                 return
 
+            # Не сканируем приватные каналы тикетов/заявок (topic содержит owner:)
+            _topic = ""
+            if isinstance(message.channel, discord.TextChannel):
+                _topic = message.channel.topic or ""
+            elif isinstance(message.channel, discord.Thread):
+                _topic = getattr(message.channel.parent, 'topic', '') or ""
+            if "owner:" in _topic:
+                return
+
             settings = await _get_settings(message.guild.id)
             if not settings["enabled"]:
                 return
