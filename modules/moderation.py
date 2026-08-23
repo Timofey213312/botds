@@ -82,6 +82,76 @@ def setup_moderation(bot):
         except Exception as e:
             logger.error(f'Ошибка отправки в modlog: {e}')
 
+    async def _audit_entry(guild, action, target_id, delay=1.0):
+        """Находит свежую запись журнала аудита по действию и цели"""
+        try:
+            await asyncio.sleep(delay)
+            async for entry in guild.audit_logs(limit=5, action=action):
+                if getattr(entry.target, 'id', None) == target_id:
+                    return entry
+        except Exception as e:
+            logger.error(f'Ошибка чтения журнала аудита: {e}')
+        return None
+
+    @bot.listen('on_member_ban')
+    async def _log_ban_audit(guild, user):
+        entry = await _audit_entry(guild, discord.AuditLogAction.ban, user.id)
+        if not entry or entry.user == guild.me:
+            return
+        await _send_modlog(guild, action="🔨 Бан участника (журнал аудита)", moderator=entry.user,
+                          target=user, reason=entry.reason or "Не указана", color=discord.Color.dark_red())
+
+    @bot.listen('on_member_unban')
+    async def _log_unban_audit(guild, user):
+        entry = await _audit_entry(guild, discord.AuditLogAction.unban, user.id)
+        if not entry or entry.user == guild.me:
+            return
+        await _send_modlog(guild, action="✅ Разбан участника (журнал аудита)", moderator=entry.user,
+                          target=user, reason=entry.reason or "Не указана", color=discord.Color.green())
+
+    @bot.listen('on_member_remove')
+    async def _log_kick_audit(member):
+        entry = await _audit_entry(member.guild, discord.AuditLogAction.kick, member.id)
+        if not entry or entry.user == member.guild.me:
+            return
+        await _send_modlog(member.guild, action="🚪 Кик участника (журнал аудита)", moderator=entry.user,
+                          target=member, reason=entry.reason or "Не указана", color=discord.Color.red())
+
+    @bot.listen('on_member_update')
+    async def _log_update_audit(before, after):
+        guild = after.guild
+        # Нативный таймаут
+        if before.timed_out_until != after.timed_out_until:
+            if after.timed_out_until:
+                action, color = "⏸️ Таймаут участника (журнал аудита)", discord.Color.orange()
+                extra = f"Истекает: {after.timed_out_until.strftime('%d.%m.%Y %H:%M')}"
+            else:
+                action, color = "✅ Таймаут снят (журнал аудита)", discord.Color.green()
+                extra = None
+            entry = await _audit_entry(guild, discord.AuditLogAction.member_update, after.id)
+            if not entry or entry.user == guild.me:
+                return
+            await _send_modlog(guild, action=action, moderator=entry.user, target=after,
+                              reason=entry.reason or "Не указана", color=color, extra=extra)
+            return
+        # Мут-роль
+        muted_role = discord.utils.get(guild.roles, name="Muted")
+        if muted_role:
+            had = muted_role in before.roles
+            now = muted_role in after.roles
+            if now and not had:
+                entry = await _audit_entry(guild, discord.AuditLogAction.member_update, after.id)
+                if not entry or entry.user == guild.me:
+                    return
+                await _send_modlog(guild, action="🔇 Мут участника (журнал аудита)", moderator=entry.user,
+                                  target=after, reason=entry.reason or "Не указана", color=discord.Color.dark_gray())
+            elif had and not now:
+                entry = await _audit_entry(guild, discord.AuditLogAction.member_update, after.id)
+                if not entry or entry.user == guild.me:
+                    return
+                await _send_modlog(guild, action="🔊 Мут снят (журнал аудита)", moderator=entry.user,
+                                  target=after, reason=entry.reason or "Не указана", color=discord.Color.green())
+
     @bot.hybrid_command(name="clear", description="Очистить сообщения в канале (1-100)")
     @app_commands.describe(amount="Количество сообщений для очистки (1-100)")
     @commands.has_permissions(manage_messages=True)
@@ -497,6 +567,10 @@ def setup_moderation(bot):
                     await ctx.send(f"❌ Участник превысил лимит предупреждений, но не удалось забанить: {e}", ephemeral=True)
                     logger.error(f'Ошибка авто-бана за превышение предупреждений: {e}')
                     return
+                await _send_modlog(ctx.guild, action="🔨 Бан участника (авто, лимит предупреждений)",
+                                  moderator=ctx.author, target=member, reason=ban_reason,
+                                  color=discord.Color.dark_red(),
+                                  extra=f"Превышен лимит предупреждений: {count}")
                 ban_embed = discord.Embed(
                     title=f"🔨 Участник забанен (лимит предупреждений)",
                     color=discord.Color.dark_red(),
