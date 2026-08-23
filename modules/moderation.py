@@ -217,24 +217,6 @@ def setup_moderation(bot):
             await ctx.send(f"❌ Ошибка при выдаче мута: {e}", ephemeral=True)
             logger.error(f'Ошибка мута: {e}')
 
-
-@bot.listen('on_voice_state_update')
-async def _auto_unmute_on_voice_leave(member, before, after):
-    """Если замученный участник полностью вышел из голосового канала — снимаем мут"""
-    if before.channel is None or after.channel is not None:
-        return
-    try:
-        muted_role = discord.utils.get(member.guild.roles, name="Muted")
-        if muted_role and muted_role in member.roles:
-            await member.remove_roles(
-                muted_role, reason="Авто-снятие мута при выходе из голосового канала")
-            logger.info(f'Мут снят с {member} (вышел из войса)')
-        if member.voice and member.voice.mute:
-            await member.edit(
-                mute=False, reason="Авто-снятие серверного мута при выходе из войса")
-    except Exception as e:
-        logger.error(f'Ошибка авто-снятия мута при выходе из войса: {e}')
-
     @bot.hybrid_command(name="timeout", description="Выдать таймаут участнику (Discord)")
     @app_commands.describe(member="Участник для таймаута", minutes="Длительность таймаута (1-40320)", reason="Причина таймаута")
     @commands.has_permissions(moderate_members=True)
