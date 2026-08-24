@@ -348,8 +348,12 @@ class ApplicationModerationView(discord.ui.View):
 
     @discord.ui.button(label="🔒 Закрыть", style=discord.ButtonStyle.secondary, custom_id="apply_close")
     async def close(self, interaction, button):
-        if not _is_staff(interaction.user):
-            await interaction.response.send_message("❌ Только администрация.", ephemeral=True)
+        topic = getattr(interaction.channel, 'topic', '') or ''
+        m_owner = re.search(r'owner:(\d+)', topic)
+        owner_id = int(m_owner.group(1)) if m_owner else None
+        if not _is_staff(interaction.user) and interaction.user.id != owner_id:
+            await interaction.response.send_message(
+                "❌ Только администрация или автор заявки может закрыть её.", ephemeral=True)
             return
         try:
             await interaction.response.send_message("🔒 Заявка закрыта.", ephemeral=True)
@@ -357,7 +361,7 @@ class ApplicationModerationView(discord.ui.View):
             pass
         try:
             await interaction.channel.delete()
-            logger.info(f'Заявка закрыта вручную: {interaction.channel.name}')
+            logger.info(f'Заявка закрыта: {interaction.channel.name} (пользователем {interaction.user})')
         except Exception as e:
             logger.error(f'Ошибка удаления канала заявки: {e}')
 
