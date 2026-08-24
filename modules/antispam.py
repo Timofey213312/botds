@@ -570,19 +570,6 @@ def setup_antispam(bot):
                         await member.add_roles(role, reason="Капча: требуется верификация")
                     except Exception as e:
                         logger.error(f'Ошибка выдачи роли капчи: {e}')
-                    vch = guild.get_channel(settings["verify_channel_id"]) if settings["verify_channel_id"] else None
-                    view = CaptchaView()
-                    if vch:
-                        try:
-                            await vch.send(f"{member.mention}, добро пожаловать! Нажми кнопку ниже для верификации.",
-                                           view=view)
-                        except Exception:
-                            pass
-                    else:
-                        try:
-                            await member.send("Нажми кнопку для верификации на сервере.", view=view)
-                        except Exception:
-                            pass
             if settings["join_raid"]:
                 now = discord.utils.utcnow().timestamp()
                 window = settings["join_raid_window"]
@@ -607,6 +594,27 @@ def setup_antispam(bot):
                     _join_times[guild.id] = []
         except Exception as e:
             logger.error(f'ОШИБКА security_join_listener: {e}')
+
+    async def _post_captcha_panel(guild, verify_channel_id):
+        if not verify_channel_id:
+            return
+        vch = guild.get_channel(verify_channel_id)
+        if not vch:
+            return
+        embed = discord.Embed(
+            title="🔐 Верификация",
+            description="Нажми кнопку ниже, чтобы подтвердить, что ты не бот и получить доступ ко всем каналам сервера.",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow())
+        embed.set_footer(text="Vector.prod • Безопасность")
+        try:
+            msg = await vch.send(embed=embed, view=CaptchaView())
+            try:
+                await msg.pin()
+            except Exception:
+                pass
+        except Exception as e:
+            logger.error(f'Ошибка публикации панели капчи: {e}')
 
     class CaptchaView(discord.ui.View):
         def __init__(self):
@@ -710,7 +718,8 @@ def setup_antispam(bot):
                 role = await _setup_captcha_role(ctx.guild, settings["verify_channel_id"])
                 await bot.db.execute("UPDATE security_settings SET captcha_enabled=1, captcha_role_id=? WHERE guild_id=?", (role.id, ctx.guild.id))
                 await bot.db.commit()
-                await ctx.send("✅ Капча включена. Неверифицированные видят только канал верификации и нажимают кнопку.")
+                await _post_captcha_panel(ctx.guild, settings["verify_channel_id"])
+                await ctx.send("✅ Капча включена. В канале верификации закреплена общая панель с кнопкой «Я не бот».")
                 return
             elif value == "off":
                 role_id = settings["captcha_role_id"]
@@ -731,6 +740,13 @@ def setup_antispam(bot):
             else:
                 await ctx.send("Используйте: `!security captcha on` / `off`")
                 return
+        if action == "panel":
+            if not settings["verify_channel_id"]:
+                await ctx.send("Сначала укажите канал верификации: `!security verifychannel #канал`")
+                return
+            await _post_captcha_panel(ctx.guild, settings["verify_channel_id"])
+            await ctx.send("Панель верификации опубликована в канале верификации.")
+            return
         if action == "massmention":
             if value == "on":
                 await bot.db.execute("UPDATE security_settings SET mass_mention=1 WHERE guild_id=?", (ctx.guild.id,)); await bot.db.commit(); await ctx.send("Масс-упоминания: вкл")
