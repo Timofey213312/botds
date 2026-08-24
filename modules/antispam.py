@@ -711,15 +711,32 @@ def setup_antispam(bot):
             return
         if action == "captcha":
             if value == "on":
-                if not settings["verify_channel_id"]:
-                    await ctx.send("Сначала укажите канал верификации: `!security verifychannel #канал`")
+                verify_channel_id = settings["verify_channel_id"]
+                if not verify_channel_id:
+                    ch = discord.utils.get(ctx.guild.channels, name="✅-верификация")
+                    if ch:
+                        verify_channel_id = ch.id
+                        await bot.db.execute("UPDATE security_settings SET verify_channel_id=? WHERE guild_id=?", (ch.id, ctx.guild.id))
+                        await bot.db.commit()
+                if not verify_channel_id:
+                    await ctx.send("Канал «✅-верификация» не найден. Создайте его или укажите: `!security verifychannel #канал`")
+                    return
+                captcha_role_id = settings["captcha_role_id"]
+                if not captcha_role_id:
+                    role = discord.utils.get(ctx.guild.roles, name="Unverified")
+                    if role:
+                        captcha_role_id = role.id
+                        await bot.db.execute("UPDATE security_settings SET captcha_role_id=? WHERE guild_id=?", (role.id, ctx.guild.id))
+                        await bot.db.commit()
+                if not captcha_role_id:
+                    await ctx.send("Роль «Unverified» не найдена. Создайте её или укажите: `!security captcharole @Unverified`")
                     return
                 await ctx.send("Настраиваю права роли капчи (может занять минуту)...")
-                role = await _setup_captcha_role(ctx.guild, settings["verify_channel_id"])
+                role = await _setup_captcha_role(ctx.guild, verify_channel_id)
                 await bot.db.execute("UPDATE security_settings SET captcha_enabled=1, captcha_role_id=? WHERE guild_id=?", (role.id, ctx.guild.id))
                 await bot.db.commit()
-                await _post_captcha_panel(ctx.guild, settings["verify_channel_id"])
-                await ctx.send("✅ Капча включена. В канале верификации закреплена общая панель с кнопкой «Я не бот».")
+                await _post_captcha_panel(ctx.guild, verify_channel_id)
+                await ctx.send("✅ Капча включена. В канале ✅-верификация закреплена общая панель с кнопкой «Я не бот».")
                 return
             elif value == "off":
                 role_id = settings["captcha_role_id"]
@@ -741,11 +758,16 @@ def setup_antispam(bot):
                 await ctx.send("Используйте: `!security captcha on` / `off`")
                 return
         if action == "panel":
-            if not settings["verify_channel_id"]:
-                await ctx.send("Сначала укажите канал верификации: `!security verifychannel #канал`")
+            verify_channel_id = settings["verify_channel_id"]
+            if not verify_channel_id:
+                ch = discord.utils.get(ctx.guild.channels, name="✅-верификация")
+                if ch:
+                    verify_channel_id = ch.id
+            if not verify_channel_id:
+                await ctx.send("Канал «✅-верификация» не найден. Создайте его или укажите: `!security verifychannel #канал`")
                 return
-            await _post_captcha_panel(ctx.guild, settings["verify_channel_id"])
-            await ctx.send("Панель верификации опубликована в канале верификации.")
+            await _post_captcha_panel(ctx.guild, verify_channel_id)
+            await ctx.send("Панель верификации опубликована в канале ✅-верификация.")
             return
         if action == "massmention":
             if value == "on":
