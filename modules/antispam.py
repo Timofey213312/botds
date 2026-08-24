@@ -417,6 +417,7 @@ def setup_antispam(bot):
 
     # ===================== БЕЗОПАСНОСТЬ: капча, антирейд, антиспам =====================
     DEFAULT_MODLOG_CHANNEL_ID = "1535655890982801438"
+    VERIFIED_ROLE_ID = 1511851487851188245  # роль, выдаваемая после прохождения капчи
 
     _spam_cache = {}
     _join_times = {}
@@ -631,10 +632,17 @@ def setup_antispam(bot):
                         await interaction.user.remove_roles(role, reason="Капча пройдена")
                     except Exception:
                         pass
+                    vrole = interaction.guild.get_role(VERIFIED_ROLE_ID)
+                    if vrole:
+                        try:
+                            await interaction.user.add_roles(vrole, reason="Капча пройдена: верификация")
+                        except Exception as e:
+                            logger.error(f'Ошибка выдачи роли верификации: {e}')
                     await interaction.response.send_message(
                         "✅ Верификация пройдена! Добро пожаловать.", ephemeral=True)
                     await _security_log(interaction.guild, "✅ Капча пройдена", discord.Color.green(), [
                         ("Участник", f"{interaction.user.mention} (`{interaction.user.id}`)"),
+                        ("Выдана роль", vrole.mention if vrole else f"`{VERIFIED_ROLE_ID}`"),
                     ])
                     return
             await interaction.response.send_message("✅ Вы уже верифицированы.", ephemeral=True)
