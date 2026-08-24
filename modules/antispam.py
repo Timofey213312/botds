@@ -632,7 +632,12 @@ def setup_antispam(bot):
             await interaction.response.send_message("✅ Вы уже верифицированы.", ephemeral=True)
 
     async def _setup_captcha_role(guild, verify_channel_id):
-        role = discord.utils.get(guild.roles, name="Капча")
+        settings = await _get_security(guild.id)
+        role = None
+        if settings.get("captcha_role_id"):
+            role = guild.get_role(settings["captcha_role_id"])
+        if not role:
+            role = discord.utils.get(guild.roles, name="Капча")
         if not role:
             role = await guild.create_role(name="Капча", reason="Антирейд: капча")
         for ch in guild.channels:
@@ -675,12 +680,33 @@ def setup_antispam(bot):
             await bot.db.commit()
             await ctx.send("Канал верификации указан.")
             return
+        if action == "captcharole":
+            if not value:
+                await ctx.send("Укажите роль: `!security captcharole @Unverified`")
+                return
+            vid = None
+            v = value.strip().replace("<@&", "").replace(">", "")
+            try:
+                vid = int(v)
+            except ValueError:
+                vid = None
+            role = ctx.guild.get_role(vid) if vid else discord.utils.get(ctx.guild.roles, name=value.strip())
+            if not role:
+                await ctx.send("Роль не найдена на сервере.")
+                return
+            if role.position >= ctx.guild.me.top_role.position:
+                await ctx.send("Эта роль выше моей — я не смогу выдавать/снимать её. Перенесите роль ниже моей роли.")
+                return
+            await bot.db.execute("UPDATE security_settings SET captcha_role_id=? WHERE guild_id=?", (role.id, ctx.guild.id))
+            await bot.db.commit()
+            await ctx.send(f"Роль капчи установлена: {role.mention}. Затем выполните `!security captcha on` (применит права к каналам).")
+            return
         if action == "captcha":
             if value == "on":
                 if not settings["verify_channel_id"]:
                     await ctx.send("Сначала укажите канал верификации: `!security verifychannel #канал`")
                     return
-                await ctx.send("Создаю роль «Капча» и настраиваю права (может занять минуту)...")
+                await ctx.send("Настраиваю права роли капчи (может занять минуту)...")
                 role = await _setup_captcha_role(ctx.guild, settings["verify_channel_id"])
                 await bot.db.execute("UPDATE security_settings SET captcha_enabled=1, captcha_role_id=? WHERE guild_id=?", (role.id, ctx.guild.id))
                 await bot.db.commit()
