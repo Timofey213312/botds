@@ -253,6 +253,7 @@ class ApplicationModerationView(discord.ui.View):
         if not _is_staff(interaction.user):
             await interaction.response.send_message("❌ Только администрация.", ephemeral=True)
             return
+            return
         embed = interaction.message.embeds[0]
         idx = _find_field_index(embed, '📌 Статус')
         if idx is not None:
@@ -322,11 +323,11 @@ class ApplicationModerationView(discord.ui.View):
             return
         try:
             await member.add_roles(role, reason=f'Принята заявка ({m_type.group(1)})')
-            logger.info(f'Выдана роль {role_name!r} участнику {member}')
+            logger.info(f'Выдана роль {role.name!r} участнику {member}')
         except discord.Forbidden:
-            logger.warning(f'Нет прав на выдачу роли {role_name!r} (иерархия/Manage Roles)')
+            logger.warning(f'Нет прав на выдачу роли {role.name!r} (иерархия/Manage Roles)')
         except Exception as e:
-            logger.error(f'Ошибка выдачи роли {role_name!r}: {e}')
+            logger.error(f'Ошибка выдачи роли {role.name!r}: {e}')
 
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="apply_accept")
     async def approve(self, interaction, button):
