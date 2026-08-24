@@ -84,7 +84,9 @@ APPLICATIONS = {
 
 
 def _is_staff(member):
-    return bool(member.guild_permissions.manage_channels or member.guild_permissions.administrator)
+    p = member.guild_permissions
+    return bool(p.administrator or p.manage_channels or p.manage_roles
+                or p.kick_members or p.ban_members or p.moderate_members)
 
 
 def _staff_roles(guild):
@@ -331,11 +333,17 @@ class ApplicationModerationView(discord.ui.View):
 
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="apply_accept")
     async def approve(self, interaction, button):
+        if not _is_staff(interaction.user):
+            await interaction.response.send_message("❌ Только администрация.", ephemeral=True)
+            return
         await self._update_status(interaction, STATUS_APPROVED, discord.Color.green())
         await self._grant_role(interaction)
 
     @discord.ui.button(label="❌ Отклонить", style=discord.ButtonStyle.danger, custom_id="apply_reject")
     async def reject(self, interaction, button):
+        if not _is_staff(interaction.user):
+            await interaction.response.send_message("❌ Только администрация.", ephemeral=True)
+            return
         await self._update_status(interaction, STATUS_REJECTED, discord.Color.red())
 
     @discord.ui.button(label="🔒 Закрыть", style=discord.ButtonStyle.secondary, custom_id="apply_close")
