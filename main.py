@@ -314,6 +314,7 @@ from modules.automod import setup_automod
 from modules.applications import setup_applications
 from modules.market import setup_market
 from modules.say import setup_say
+from modules.guard import setup_guard
 
 # Настройка модулей (каждый в try/except, чтобы сбой одного не убивал остальные и их persistent views)
 _setups = {
@@ -336,6 +337,7 @@ _setups = {
     "applications": setup_applications,
     "market": setup_market,
     "say": setup_say,
+    "guard": setup_guard,
 }
 for _name, _fn in _setups.items():
     try:
