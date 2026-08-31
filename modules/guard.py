@@ -178,11 +178,16 @@ def setup_guard(bot):
             return
         if _is_owner(entry.user):
             return
-        await _guard_log(guild, "⚠️ Обнаружено: создание канала", discord.Color.orange(), [
-            ("Канал", f"#{channel.name} (`{channel.id}`)"),
-            ("Создал", entry.user.mention),
-            ("Тип", str(channel.type)),
-        ], ping_owner=True)
+        global _change_counter
+        _change_counter += 1
+        cid = f"gc_{_change_counter}"
+        PENDING_CHANGES[cid] = {"type": "channel_create", "channel_id": channel.id}
+        await _send_approval_request(
+            guild, cid, PENDING_CHANGES[cid],
+            "Создание канала",
+            f"#{channel.name} (`{channel.id}`)",
+            entry.user,
+            f"Тип: {channel.type}")
 
     @bot.listen('on_guild_channel_delete')
     async def guard_channel_delete(channel):
@@ -209,12 +214,17 @@ def setup_guard(bot):
                 "overwrites": overwrites,
             }
             success = await _try_revert_guild_channel_delete(guild, entry, channel_data)
+            global _change_counter
+            _change_counter += 1
+            cid = f"gc_del_{_change_counter}"
+            PENDING_CHANGES[cid] = {"type": "channel_delete", "channel_data": channel_data}
             if not success:
-                await _guard_log(guild, "🔴 Удаление канала (откат не удался)", discord.Color.red(), [
-                    ("Канал", f"#{channel.name} (`{channel.id}`)"),
-                    ("Удалил", entry.user.mention),
-                    ("Причина", "Не удалось восстановить автоматически"),
-                ], ping_owner=True)
+                await _send_approval_request(
+                    guild, cid, PENDING_CHANGES[cid],
+                    "Удаление канала (откат не удался)",
+                    f"#{channel.name} (`{channel.id}`)",
+                    entry.user,
+                    "Канал не удалось восстановить автоматически")
         except Exception as e:
             logger.error(f'Ошибка обработки удаления канала: {e}')
 
@@ -240,11 +250,16 @@ def setup_guard(bot):
             changes.append("Изменены разрешения канала")
 
         if changes:
-            await _guard_log(guild, "⚠️ Обнаружено: изменение канала", discord.Color.orange(), [
-                ("Канал", f"#{after.name} (`{after.id}`)"),
-                ("Изменил", entry.user.mention),
-                ("Изменения", "\n".join(changes)),
-            ], ping_owner=True)
+            global _change_counter
+            _change_counter += 1
+            cid = f"gc_upd_{_change_counter}"
+            PENDING_CHANGES[cid] = {"type": "channel_update", "channel_id": after.id}
+            await _send_approval_request(
+                guild, cid, PENDING_CHANGES[cid],
+                "Изменение канала",
+                f"#{after.name} (`{after.id}`)",
+                entry.user,
+                "\n".join(changes))
 
     @bot.listen('on_guild_role_create')
     async def guard_role_create(role):
@@ -258,12 +273,16 @@ def setup_guard(bot):
             return
         if _is_owner(entry.user):
             return
-        await _guard_log(guild, "⚠️ Обнаружено: создание роли", discord.Color.orange(), [
-            ("Роль", f"{role.mention} (`{role.id}`)"),
-            ("Создал", entry.user.mention),
-            ("Цвет", str(role.color)),
-            ("Права", str(role.permissions)),
-        ], ping_owner=True)
+        global _change_counter
+        _change_counter += 1
+        cid = f"gr_{_change_counter}"
+        PENDING_CHANGES[cid] = {"type": "role_create", "role_id": role.id}
+        await _send_approval_request(
+            guild, cid, PENDING_CHANGES[cid],
+            "Создание роли",
+            f"{role.mention} (`{role.id}`)",
+            entry.user,
+            f"Цвет: {role.color}\nПрава: {role.permissions}")
 
     @bot.listen('on_guild_role_delete')
     async def guard_role_delete(role):
@@ -287,12 +306,17 @@ def setup_guard(bot):
                 "permissions": role.permissions.value,
             }
             success = await _try_revert_guild_role_delete(guild, entry, role_data)
+            global _change_counter
+            _change_counter += 1
+            cid = f"gr_del_{_change_counter}"
+            PENDING_CHANGES[cid] = {"type": "role_delete", "role_data": role_data}
             if not success:
-                await _guard_log(guild, "🔴 Удаление роли (откат не удался)", discord.Color.red(), [
-                    ("Роль", f"`{role.name}` (`{role.id}`)"),
-                    ("Удалил", entry.user.mention),
-                    ("Причина", "Не удалось восстановить автоматически"),
-                ], ping_owner=True)
+                await _send_approval_request(
+                    guild, cid, PENDING_CHANGES[cid],
+                    "Удаление роли (откат не удался)",
+                    f"`{role.name}` (`{role.id}`)",
+                    entry.user,
+                    "Роль не удалось восстановить автоматически")
         except Exception as e:
             logger.error(f'Ошибка обработки удаления роли: {e}')
 
@@ -324,11 +348,16 @@ def setup_guard(bot):
             changes.append(f"Позиция: `{before.position}` → `{after.position}`")
 
         if changes:
-            await _guard_log(guild, "⚠️ Обнаружено: изменение роли", discord.Color.orange(), [
-                ("Роль", f"{after.mention} (`{after.id}`)"),
-                ("Изменил", entry.user.mention),
-                ("Изменения", "\n".join(changes)),
-            ], ping_owner=True)
+            global _change_counter
+            _change_counter += 1
+            cid = f"gr_upd_{_change_counter}"
+            PENDING_CHANGES[cid] = {"type": "role_update", "role_id": after.id}
+            await _send_approval_request(
+                guild, cid, PENDING_CHANGES[cid],
+                "Изменение роли",
+                f"{after.mention} (`{after.id}`)",
+                entry.user,
+                "\n".join(changes))
 
     @bot.listen('on_guild_update')
     async def guard_guild_update(before, after):
@@ -363,11 +392,16 @@ def setup_guard(bot):
             changes.append("Канал правил изменён")
 
         if changes:
-            await _guard_log(after, "⚠️ Обнаружено: изменение сервера", discord.Color.orange(), [
-                ("Сервер", f"`{after.name}` (`{after.id}`)"),
-                ("Изменил", entry.user.mention),
-                ("Изменения", "\n".join(changes)),
-            ], ping_owner=True)
+            global _change_counter
+            _change_counter += 1
+            cid = f"gu_{_change_counter}"
+            PENDING_CHANGES[cid] = {"type": "guild_update", "guild_id": after.id}
+            await _send_approval_request(
+                after, cid, PENDING_CHANGES[cid],
+                "Изменение сервера",
+                f"`{after.name}` (`{after.id}`)",
+                entry.user,
+                "\n".join(changes))
 
     @bot.listen('on_member_update')
     async def guard_member_update(before, after):
@@ -396,11 +430,16 @@ def setup_guard(bot):
                 changes.append(f"-{r.mention}")
 
         if changes:
-            await _guard_log(guild, "⚠️ Обнаружено: изменение ролей участника", discord.Color.orange(), [
-                ("Участник", f"{after.mention} (`{after.id}`)"),
-                ("Изменил", entry.user.mention),
-                ("Изменения", "\n".join(changes)),
-            ], ping_owner=True)
+            global _change_counter
+            _change_counter += 1
+            cid = f"mu_{_change_counter}"
+            PENDING_CHANGES[cid] = {"type": "member_role_update", "member_id": after.id}
+            await _send_approval_request(
+                guild, cid, PENDING_CHANGES[cid],
+                "Изменение ролей участника",
+                f"{after.mention} (`{after.id}`)",
+                entry.user,
+                "\n".join(changes))
 
     class GuardApprovalView(discord.ui.View):
         def __init__(self, change_id):
