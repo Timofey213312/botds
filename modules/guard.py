@@ -86,18 +86,29 @@ def setup_guard(bot):
             embed.add_field(name="Детали", value=extra, inline=False)
         embed.set_footer(text=f"Change ID: {change_id} • Vector.prod • Защита сервера")
 
+        log_channel = await _get_guard_channel(guild)
+        log_msg = None
+        if log_channel:
+            try:
+                log_msg = await log_channel.send(embed=embed)
+                PENDING_CHANGES[change_id]["log_channel_id"] = log_channel.id
+                PENDING_CHANGES[change_id]["log_message_id"] = log_msg.id
+            except Exception as e:
+                logger.error(f'Ошибка отправки лога guard: {e}')
+
         try:
             dm = await owner.create_dm()
             msg = await dm.send(embed=embed, view=view)
             PENDING_CHANGES[change_id]["message_id"] = msg.id
             PENDING_CHANGES[change_id]["channel_id"] = dm.id
         except discord.Forbidden:
-            ch = await _get_guard_channel(guild)
-            if ch:
-                await ch.send(
-                    content=f"{owner.mention} **ВЛ ЛС ЗАКРЫТЫ!** Нужно открыть ЛС для получения уведомлений!",
-                    embed=embed,
-                    view=view)
+            if log_channel:
+                try:
+                    await log_msg.edit(
+                        content=f"{owner.mention} **В ЛС ЗАКРЫТЫ!** Нужно открыть ЛС!",
+                        view=view)
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f'Ошибка отправки в ЛС владельца: {e}')
 
@@ -498,6 +509,24 @@ def setup_guard(bot):
                 await interaction.response.send_message("❌ Только владелец сервера может одобрять.", ephemeral=True)
                 return
             await interaction.response.send_message("✅ Изменение одобрено.", ephemeral=True)
+            data = PENDING_CHANGES.get(self.change_id)
+            if data:
+                log_ch_id = data.get("log_channel_id")
+                log_msg_id = data.get("log_message_id")
+                if log_ch_id and log_msg_id:
+                    try:
+                        ch = interaction.client.get_channel(log_ch_id) or await interaction.client.fetch_channel(log_ch_id)
+                        msg = await ch.fetch_message(log_msg_id)
+                        await msg.delete()
+                    except Exception:
+                        pass
+                del PENDING_CHANGES[self.change_id]
+            for child in self.children:
+                child.disabled = True
+            try:
+                await interaction.edit_original_response(view=self)
+            except Exception:
+                pass
 
         @discord.ui.button(label="❌ Отклонить", style=discord.ButtonStyle.danger, custom_id="guard_deny")
         async def deny(self, interaction, button):
@@ -505,6 +534,24 @@ def setup_guard(bot):
                 await interaction.response.send_message("❌ Только владелец сервера может отклонять.", ephemeral=True)
                 return
             await interaction.response.send_message("❌ Изменение отклонено.", ephemeral=True)
+            data = PENDING_CHANGES.get(self.change_id)
+            if data:
+                log_ch_id = data.get("log_channel_id")
+                log_msg_id = data.get("log_message_id")
+                if log_ch_id and log_msg_id:
+                    try:
+                        ch = interaction.client.get_channel(log_ch_id) or await interaction.client.fetch_channel(log_ch_id)
+                        msg = await ch.fetch_message(log_msg_id)
+                        await msg.delete()
+                    except Exception:
+                        pass
+                del PENDING_CHANGES[self.change_id]
+            for child in self.children:
+                child.disabled = True
+            try:
+                await interaction.edit_original_response(view=self)
+            except Exception:
+                pass
 
     bot.add_view(GuardApprovalView(0))
 
