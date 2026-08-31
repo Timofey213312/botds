@@ -62,8 +62,8 @@ def setup_guard(bot):
 
     async def _send_approval_request(guild, change_id, change_data, action_str, target_str, moderator, extra=""):
         global PENDING_CHANGES
-        ch = await _get_guard_channel(guild)
-        if not ch:
+        owner = guild.owner
+        if not owner:
             return
 
         view = GuardApprovalView(change_id)
@@ -75,19 +75,41 @@ def setup_guard(bot):
         embed.add_field(name="Действие", value=action_str, inline=True)
         embed.add_field(name="Объект", value=target_str, inline=True)
         embed.add_field(name="Кто изменил", value=f"{moderator.mention} (`{moderator.id}`)", inline=True)
+        embed.add_field(name="Сервер", value=guild.name, inline=True)
         if extra:
             embed.add_field(name="Детали", value=extra, inline=False)
         embed.set_footer(text=f"Change ID: {change_id} • Vector.prod • Защита сервера")
 
         try:
-            msg = await ch.send(
-                content=f"{guild.owner.mention} одобри или отмени это изменение",
-                embed=embed,
-                view=view)
+            dm = await owner.create_dm()
+            msg = await dm.send(embed=embed, view=view)
             PENDING_CHANGES[change_id]["message_id"] = msg.id
-            PENDING_CHANGES[change_id]["channel_id"] = ch.id
-        except Exception:
-            pass
+            PENDING_CHANGES[change_id]["channel_id"] = dm.id
+        except discord.Forbidden:
+            ch = await _get_guard_channel(guild)
+            if ch:
+                await ch.send(
+                    content=f"{owner.mention} **ВЛ ЛС ЗАКРЫТЫ!** Нужно открыть ЛС для получения уведомлений!",
+                    embed=embed,
+                    view=view)
+        except Exception as e:
+            logger.error(f'Ошибка отправки в ЛС владельца: {e}')
+
+        ch = await _get_guard_channel(guild)
+        if ch:
+            log_embed = discord.Embed(
+                title=f"🛡️ Guard: {action_str}",
+                color=discord.Color.orange(),
+                timestamp=datetime.now())
+            log_embed.add_field(name="Объект", value=target_str, inline=True)
+            log_embed.add_field(name="Кто изменил", value=moderator.mention, inline=True)
+            if extra:
+                log_embed.add_field(name="Детали", value=extra[:1024], inline=False)
+            log_embed.set_footer(text=f"Change ID: {change_id} • Vector.prod • Защита сервера")
+            try:
+                await ch.send(embed=log_embed)
+            except Exception:
+                pass
 
     async def _try_revert_guild_channel_create(guild, entry, channel):
         try:
